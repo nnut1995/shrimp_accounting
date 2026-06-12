@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv /Users/natnunpanichphong/Desktop/shrimp_accounting/SPEC.md /tmp/SPEC.md)",
+      "Bash(npx -y create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --use-npm --yes)"
+    ]
+  }
+}
