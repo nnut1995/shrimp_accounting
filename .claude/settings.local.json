@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(mv /Users/natnunpanichphong/Desktop/shrimp_accounting/SPEC.md /tmp/SPEC.md)",
-      "Bash(npx -y create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --use-npm --yes)"
+      "Bash(npx -y create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --use-npm --yes)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"next start\")",
+      "Bash(pkill -f \"next-server\")",
+      "Bash(perl -e 'select\\(undef,undef,undef,1\\)')",
+      "Bash(curl -s -o /dev/null -w \"after cleanup: %{http_code}\\\\n\" --max-time 3 http://localhost:3000/)",
+      "Bash(npx tsc *)"
     ]
   }
 }
