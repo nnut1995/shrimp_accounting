@@ -57,9 +57,12 @@ create table adjustments (
   id uuid primary key default gen_random_uuid(),
   lot_id uuid not null references lots(id) on delete cascade,
   amount numeric(14,2) not null default 0,
+  kind text not null default 'sales' check (kind in ('cost', 'sales')),
   note text not null default '',
   created_at timestamptz not null default now()
 );
+-- migration for existing databases:
+-- alter table adjustments add column kind text not null default 'sales' check (kind in ('cost', 'sales'));
 
 create table expenses (
   id uuid primary key default gen_random_uuid(),

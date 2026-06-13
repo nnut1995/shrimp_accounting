@@ -216,6 +216,7 @@ export async function addAdjustment(formData: FormData) {
   const { error } = await supabase.from("adjustments").insert({
     lot_id: lotId,
     amount: num(formData.get("amount")),
+    kind: str(formData.get("kind")) === "cost" ? "cost" : "sales",
     note: str(formData.get("note")),
   });
   if (error) throw new Error(error.message);

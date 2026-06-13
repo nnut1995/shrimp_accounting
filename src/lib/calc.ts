@@ -15,7 +15,8 @@ export type SizeRow = {
 
 export type LotSummary = {
   sizeRows: SizeRow[];
-  adjustmentTotal: number;
+  costAdjustment: number;
+  salesAdjustment: number;
   total: SizeRow;
   buyKg: number;
   sellKg: number;
@@ -64,16 +65,24 @@ export function calcLot(
     });
   }
 
-  const adjustmentTotal = round2(
-    adjustments.reduce((a, x) => a + Number(x.amount), 0)
+  const costAdjustment = round2(
+    adjustments
+      .filter((x) => x.kind === "cost")
+      .reduce((a, x) => a + Number(x.amount), 0)
+  );
+  const salesAdjustment = round2(
+    adjustments
+      .filter((x) => x.kind === "sales")
+      .reduce((a, x) => a + Number(x.amount), 0)
   );
   const buyKg = round2(sizeRows.reduce((a, r) => a + r.buyKg, 0));
   const sellKg = round2(sizeRows.reduce((a, r) => a + r.sellKg, 0));
-  const costTotal = round2(sizeRows.reduce((a, r) => a + r.cost, 0));
+  const sizeCostTotal = round2(sizeRows.reduce((a, r) => a + r.cost, 0));
+  const costTotal = round2(sizeCostTotal + costAdjustment);
   const salesTotal = round2(sizeRows.reduce((a, r) => a + r.sales, 0));
   const expenseTotal = round2(expenses.reduce((a, x) => a + Number(x.amount), 0));
 
-  const netSales = round2(salesTotal + adjustmentTotal);
+  const netSales = round2(salesTotal + salesAdjustment);
   const totalDiffKg = round2(sellKg - buyKg);
   const headlineDiffKg = totalDiffKg;
   const headlineDenomKg = buyKg;
@@ -90,7 +99,8 @@ export function calcLot(
 
   return {
     sizeRows,
-    adjustmentTotal,
+    costAdjustment,
+    salesAdjustment,
     total,
     buyKg,
     sellKg,

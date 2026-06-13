@@ -166,9 +166,9 @@ export default async function LotPage({
                 <td className={tdR}></td>
                 <td className={tdR}></td>
                 <td className={tdR}></td>
+                <td className={tdR}>{fmt(s.costAdjustment)}</td>
+                <td className={tdR}>{fmt(s.salesAdjustment)}</td>
                 <td className={tdR}></td>
-                <td className={tdR}>{fmt(s.adjustmentTotal)}</td>
-                <td className={tdR}>{fmt(s.adjustmentTotal)}</td>
               </tr>
               <tr className="font-semibold bg-gray-50">
                 <td className={td}>รวม</td>
@@ -369,6 +369,7 @@ export default async function LotPage({
             <table className="w-full border-collapse bg-white">
               <thead>
                 <tr>
+                  <th className={th}>ประเภท</th>
                   <th className={th}>จำนวนเงิน</th>
                   <th className={th}>หมายเหตุ</th>
                   <th className={`${th} no-print`}></th>
@@ -377,6 +378,9 @@ export default async function LotPage({
               <tbody>
                 {adjs.map((a) => (
                   <tr key={a.id}>
+                    <td className={td}>
+                      {a.kind === "cost" ? "ต้นทุนซื้อ" : "ยอดขาย"}
+                    </td>
                     <td className={tdR}>{fmt(Number(a.amount))}</td>
                     <td className={td}>{a.note}</td>
                     <td className={`${td} no-print text-center`}>
@@ -393,6 +397,13 @@ export default async function LotPage({
           className="no-print mt-2 flex flex-wrap gap-2 items-end bg-white border border-gray-200 rounded-lg p-3"
         >
           <input type="hidden" name="lot_id" value={l.id} />
+          <label className="text-xs text-gray-600">
+            ประเภท
+            <select name="kind" defaultValue="sales" className={input}>
+              <option value="sales">ยอดขาย</option>
+              <option value="cost">ต้นทุนซื้อ</option>
+            </select>
+          </label>
           <label className="text-xs text-gray-600">
             จำนวนเงิน (+/-)
             <input name="amount" required inputMode="decimal" className={input} />

@@ -35,10 +35,13 @@ export type SellLine = {
   created_at: string;
 };
 
+export type AdjustmentKind = "cost" | "sales";
+
 export type Adjustment = {
   id: string;
   lot_id: string;
   amount: number;
+  kind: AdjustmentKind;
   note: string;
   created_at: string;
 };
