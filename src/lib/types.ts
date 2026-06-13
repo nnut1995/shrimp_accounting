@@ -46,6 +46,20 @@ export type Adjustment = {
   created_at: string;
 };
 
+export const EXPENSE_CATEGORIES = [
+  "ค่าธรรมเนียม",
+  "ค่าจับ",
+  "น้ำดอง",
+  "รถ 10 ล้อ",
+  "น้ำแข็ง",
+  "คุมจับ",
+  "ค่าน้ำมัน",
+  "ค่ารถ",
+  "ค่านายหน้า",
+  "ที่พัก",
+  "ค่าเดินทาง",
+] as const;
+
 export type Expense = {
   id: string;
   lot_id: string;

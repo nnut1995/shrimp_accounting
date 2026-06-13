@@ -6,7 +6,12 @@ import { THAI_MONTHS, beYear, formatBE, monthLabelBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import { MonthlyTrendChart, ProfitPerLotChart } from "@/components/Charts";
 import DeleteButton from "@/components/DeleteButton";
-import type { LotWithChildren, MonthlyExpense, Size } from "@/lib/types";
+import {
+  EXPENSE_CATEGORIES,
+  type LotWithChildren,
+  type MonthlyExpense,
+  type Size,
+} from "@/lib/types";
 
 const LOT_SELECT =
   "*, suppliers(name), buy_lines(*), sell_lines(*), adjustments(*), expenses(*, expense_categories(name))";
@@ -61,7 +66,9 @@ export default async function MonthlyPage({
   const yearLots = (lots ?? []) as LotWithChildren[];
   const sizeList = (sizes ?? []) as Size[];
   const yearMonthlyExps = (monthlyExps ?? []) as MonthlyExpense[];
-  const catNames = (cats ?? []).map((c) => c.name);
+  const catNames = [
+    ...new Set([...EXPENSE_CATEGORIES, ...(cats ?? []).map((c) => c.name)]),
+  ];
 
   const yearRows = yearLots.map((l) => ({
     lot: l,

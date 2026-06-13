@@ -29,6 +29,14 @@ export function monthLabelBE(ceYear: number, month: number): string {
   return `${THAI_MONTHS[month - 1]} ${beYear(ceYear)}`;
 }
 
+/** "2026-05-15" + 1 -> "2026-05-16" (handles month/year rollover) */
+export function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
 export function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

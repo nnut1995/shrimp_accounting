@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot } from "@/lib/calc";
-import { formatBE } from "@/lib/dates";
+import { addDaysISO, formatBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import {
   addAdjustment,
@@ -19,7 +19,7 @@ import {
 } from "@/app/actions";
 import DeleteButton from "@/components/DeleteButton";
 import EditableRow from "@/components/EditableRow";
-import type { LotWithChildren, Size } from "@/lib/types";
+import { EXPENSE_CATEGORIES, type LotWithChildren, type Size } from "@/lib/types";
 
 const LOT_SELECT =
   "*, suppliers(name), buy_lines(*), sell_lines(*), adjustments(*), expenses(*, expense_categories(name))";
@@ -49,7 +49,12 @@ export default async function LotPage({
   if (!lot) notFound();
   const l = lot as LotWithChildren;
   const sizeList = (sizes ?? []) as Size[];
-  const catNames = ((cats ?? []) as { name: string }[]).map((c) => c.name);
+  const catNames = [
+    ...new Set([
+      ...EXPENSE_CATEGORIES,
+      ...((cats ?? []) as { name: string }[]).map((c) => c.name),
+    ]),
+  ];
 
   const byCreated = (a: { created_at: string }, b: { created_at: string }) =>
     a.created_at.localeCompare(b.created_at);
@@ -323,7 +328,7 @@ export default async function LotPage({
           <input type="hidden" name="lot_id" value={l.id} />
           <label className="text-xs text-gray-600">
             วันที่ขาย
-            <input name="sell_date" type="date" required defaultValue={l.buy_date} className={input} />
+            <input name="sell_date" type="date" required defaultValue={addDaysISO(l.buy_date, 1)} className={input} />
           </label>
           <label className="text-xs text-gray-600">
             ตู้
