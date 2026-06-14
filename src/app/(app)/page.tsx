@@ -116,8 +116,8 @@ export default async function LotListPage({
             <tr>
               <th className={th}>วันที่ซื้อ</th>
               <th className={th}>ผู้ขาย</th>
-              <th className={`${th} text-right`}>ซื้อ กก.</th>
-              <th className={`${th} text-right`}>ขาย กก.</th>
+              <th className={`${th} text-right`}>น้ำหนัก</th>
+              <th className={`${th} text-right`}>น้ำหนัก</th>
               <th className={`${th} text-right`}>ยอดขายสุทธิ</th>
               <th className={`${th} text-right`}>กำไร/ขาดทุน</th>
               <th className={th}>หมายเหตุ</th>

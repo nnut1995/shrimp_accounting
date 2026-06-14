@@ -32,6 +32,13 @@ export type SellLine = {
   density: string;
   weight_kg: number;
   price_per_kg: number;
+  buyer: string;
+  // ค่าธรรมเนียม per line: either a percentage of this line's sales (fee_pct,
+  // default 1.2) or an explicit baht override (fee_amount). When fee_amount is
+  // set it wins; otherwise fee = sales * fee_pct / 100. A null fee_pct also
+  // means the 1.2% default (handled in calc).
+  fee_pct: number | null;
+  fee_amount: number | null;
   created_at: string;
 };
 

@@ -2,6 +2,29 @@ import type { Adjustment, BuyLine, Expense, SellLine, Size } from "./types";
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// Default ค่าธรรมเนียม rate applied to each sell line's sales (percent).
+export const FEE_DEFAULT_PCT = 1.2;
+
+export function sellLineSales(sl: SellLine): number {
+  return Number(sl.weight_kg) * Number(sl.price_per_kg);
+}
+
+// ค่าธรรมเนียม for one sell line: explicit baht amount wins, otherwise a
+// percentage of that line's sales (defaulting to 1.2% when unset).
+export function sellLineFee(sl: SellLine): number {
+  if (sl.fee_amount != null) return round2(Number(sl.fee_amount));
+  const pct = sl.fee_pct != null ? Number(sl.fee_pct) : FEE_DEFAULT_PCT;
+  return round2((sellLineSales(sl) * pct) / 100);
+}
+
+// Value shown in the editable fee input: "1.2%" for a percentage, or the plain
+// baht number for an explicit override.
+export function feeInputValue(sl: SellLine): string {
+  if (sl.fee_amount != null) return String(sl.fee_amount);
+  const pct = sl.fee_pct != null ? Number(sl.fee_pct) : FEE_DEFAULT_PCT;
+  return `${pct}%`;
+}
+
 export type SizeRow = {
   code: string;
   buyKg: number;
@@ -28,7 +51,9 @@ export type LotSummary = {
   salesTotal: number;
   netSales: number;
   costTotal: number;
+  // expenseTotal is all-in: manual expense lines + auto per-line ค่าธรรมเนียม.
   expenseTotal: number;
+  feeTotal: number;
   profit: number;
 };
 
@@ -80,7 +105,11 @@ export function calcLot(
   const sizeCostTotal = round2(sizeRows.reduce((a, r) => a + r.cost, 0));
   const costTotal = round2(sizeCostTotal + costAdjustment);
   const salesTotal = round2(sizeRows.reduce((a, r) => a + r.sales, 0));
-  const expenseTotal = round2(expenses.reduce((a, x) => a + Number(x.amount), 0));
+  const manualExpenseTotal = round2(
+    expenses.reduce((a, x) => a + Number(x.amount), 0)
+  );
+  const feeTotal = round2(sells.reduce((a, x) => a + sellLineFee(x), 0));
+  const expenseTotal = round2(manualExpenseTotal + feeTotal);
 
   const netSales = round2(salesTotal + salesAdjustment);
   const totalDiffKg = round2(sellKg - buyKg);
@@ -111,6 +140,7 @@ export function calcLot(
     netSales,
     costTotal,
     expenseTotal,
+    feeTotal,
     profit: round2(netSales - costTotal - expenseTotal),
   };
 }

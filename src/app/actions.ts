@@ -13,6 +13,24 @@ function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
 
+// ค่าธรรมเนียม input accepts either a percentage ("1.2%") or an exact baht
+// amount ("150"). Empty falls back to the 1.2% default.
+function parseFee(v: FormDataEntryValue | null): {
+  fee_pct: number | null;
+  fee_amount: number | null;
+} {
+  const raw = String(v ?? "").trim().replace(/,/g, "");
+  if (!raw) return { fee_pct: 1.2, fee_amount: null };
+  if (raw.endsWith("%")) {
+    const pct = parseFloat(raw.slice(0, -1));
+    return { fee_pct: Number.isFinite(pct) ? pct : 1.2, fee_amount: null };
+  }
+  const amt = parseFloat(raw);
+  return Number.isFinite(amt)
+    ? { fee_pct: null, fee_amount: amt }
+    : { fee_pct: 1.2, fee_amount: null };
+}
+
 async function findOrCreateByName(
   table: "suppliers" | "expense_categories",
   name: string
@@ -130,6 +148,8 @@ export async function addSellLine(formData: FormData) {
     density: str(formData.get("density")),
     weight_kg: num(formData.get("weight_kg")),
     price_per_kg: num(formData.get("price_per_kg")),
+    buyer: str(formData.get("buyer")),
+    ...parseFee(formData.get("fee")),
   });
   if (error) throw new Error(error.message);
   revalidatePath(`/lots/${lotId}`);
@@ -148,8 +168,24 @@ export async function updateSellLine(formData: FormData) {
       density: str(formData.get("density")),
       weight_kg: num(formData.get("weight_kg")),
       price_per_kg: num(formData.get("price_per_kg")),
+      buyer: str(formData.get("buyer")),
+      ...parseFee(formData.get("fee")),
     })
     .eq("id", str(formData.get("id")));
+  if (error) throw new Error(error.message);
+  revalidatePath(`/lots/${lotId}`);
+}
+
+// Apply one ค่าธรรมเนียม value (percentage like "1.2%" or a baht amount) to
+// every sell line in the lot at once.
+export async function bulkUpdateSellFee(formData: FormData) {
+  const supabase = await createClient();
+  const lotId = str(formData.get("lot_id"));
+  if (!lotId) throw new Error("ไม่พบล็อต");
+  const { error } = await supabase
+    .from("sell_lines")
+    .update(parseFee(formData.get("fee")))
+    .eq("lot_id", lotId);
   if (error) throw new Error(error.message);
   revalidatePath(`/lots/${lotId}`);
 }

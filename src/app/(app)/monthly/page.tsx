@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addMonthlyExpense, deleteMonthlyExpense } from "@/app/actions";
-import { calcLot, round2 } from "@/lib/calc";
+import { calcLot, round2, sellLineSales } from "@/lib/calc";
 import { THAI_MONTHS, beYear, formatBE, monthLabelBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import { MonthlyTrendChart, ProfitPerLotChart } from "@/components/Charts";
@@ -109,6 +109,12 @@ export default async function MonthlyPage({
       const name = e.expense_categories?.name ?? "อื่นๆ";
       expMap.set(name, round2((expMap.get(name) ?? 0) + Number(e.amount)));
     }
+    if (x.s.feeTotal > 0) {
+      expMap.set(
+        "ค่าธรรมเนียม",
+        round2((expMap.get("ค่าธรรมเนียม") ?? 0) + x.s.feeTotal)
+      );
+    }
   }
   const expRows = Array.from(expMap.entries()).sort((a, b) => b[1] - a[1]);
 
@@ -131,6 +137,30 @@ export default async function MonthlyPage({
     (a, b) => b[1].profit - a[1].profit
   );
 
+  // buyer comparison (per sell line — who bought the shrimp)
+  const buyerMap = new Map<
+    string,
+    { lots: Set<string>; sellKg: number; sales: number }
+  >();
+  for (const x of monthRows) {
+    for (const sl of x.lot.sell_lines) {
+      const name = sl.buyer?.trim() || "ไม่ระบุ";
+      const cur =
+        buyerMap.get(name) ?? { lots: new Set<string>(), sellKg: 0, sales: 0 };
+      cur.lots.add(x.lot.id);
+      cur.sellKg = round2(cur.sellKg + Number(sl.weight_kg));
+      cur.sales = round2(cur.sales + sellLineSales(sl));
+      buyerMap.set(name, cur);
+    }
+  }
+  const buyerRows = Array.from(buyerMap.entries()).sort(
+    (a, b) => b[1].sales - a[1].sales
+  );
+  const buyerTotals = {
+    sellKg: round2(buyerRows.reduce((a, [, v]) => a + v.sellKg, 0)),
+    sales: round2(buyerRows.reduce((a, [, v]) => a + v.sales, 0)),
+  };
+
   // charts
   const lotChart = monthRows.map((x) => ({
     name: `${formatBE(x.lot.buy_date)} ${x.lot.suppliers?.name ?? ""}`,
@@ -150,8 +180,8 @@ export default async function MonthlyPage({
 
   const headline: [string, string, string?][] = [
     ["จำนวนล็อต", String(monthRows.length)],
-    ["ซื้อ กก.", fmt(totals.buyKg)],
-    ["ขาย กก.", fmt(totals.sellKg)],
+    ["น้ำหนัก", fmt(totals.buyKg)],
+    ["น้ำหนัก", fmt(totals.sellKg)],
     ["% เพิ่ม/ลด", fmtPct(totalHeadlinePct)],
     ["ยอดขายสุทธิ", fmt(totals.netSales)],
     ["ต้นทุนซื้อ", fmt(totals.costTotal)],
@@ -198,8 +228,8 @@ export default async function MonthlyPage({
 
       {/* month totals */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {headline.map(([label, value, cls]) => (
-          <div key={label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        {headline.map(([label, value, cls], i) => (
+          <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
             <div className="text-xs text-gray-500">{label}</div>
             <div className={`text-lg font-semibold ${cls ?? ""}`}>{value}</div>
           </div>
@@ -215,8 +245,9 @@ export default async function MonthlyPage({
               <tr>
                 <th className={th}>วันที่ซื้อ</th>
                 <th className={th}>ผู้ขาย</th>
-                <th className={th}>ซื้อ กก.</th>
-                <th className={th}>ขาย กก.</th>
+                <th className={th}>น้ำหนัก</th>
+                <th className={th}>น้ำหนัก</th>
+                <th className={th}>% เพิ่ม/ลด</th>
                 <th className={th}>ยอดขายสุทธิ</th>
                 <th className={th}>ต้นทุนซื้อ</th>
                 <th className={th}>ค่าใช้จ่าย</th>
@@ -226,7 +257,7 @@ export default async function MonthlyPage({
             <tbody>
               {monthRows.length === 0 && (
                 <tr>
-                  <td className={`${td} text-center text-gray-500`} colSpan={8}>
+                  <td className={`${td} text-center text-gray-500`} colSpan={9}>
                     ไม่มีล็อตในเดือนนี้
                   </td>
                 </tr>
@@ -244,6 +275,17 @@ export default async function MonthlyPage({
                   <td className={td}>{lot.suppliers?.name}</td>
                   <td className={tdR}>{fmt(s.buyKg)}</td>
                   <td className={tdR}>{fmt(s.sellKg)}</td>
+                  <td
+                    className={`${tdR} ${
+                      s.headlinePct == null
+                        ? ""
+                        : s.headlinePct >= 0
+                          ? "text-green-700"
+                          : "text-red-700"
+                    }`}
+                  >
+                    {fmtPct(s.headlinePct)}
+                  </td>
                   <td className={tdR}>{fmt(s.netSales)}</td>
                   <td className={tdR}>{fmt(s.costTotal)}</td>
                   <td className={tdR}>{fmt(s.expenseTotal)}</td>
@@ -263,6 +305,17 @@ export default async function MonthlyPage({
                   </td>
                   <td className={tdR}>{fmt(totals.buyKg)}</td>
                   <td className={tdR}>{fmt(totals.sellKg)}</td>
+                  <td
+                    className={`${tdR} ${
+                      totalHeadlinePct == null
+                        ? ""
+                        : totalHeadlinePct >= 0
+                          ? "text-green-700"
+                          : "text-red-700"
+                    }`}
+                  >
+                    {fmtPct(totalHeadlinePct)}
+                  </td>
                   <td className={tdR}>{fmt(totals.netSales)}</td>
                   <td className={tdR}>{fmt(totals.costTotal)}</td>
                   <td className={tdR}>{fmt(totals.expenseTotal)}</td>
@@ -396,7 +449,7 @@ export default async function MonthlyPage({
               <tr>
                 <th className={th}>ผู้ขาย</th>
                 <th className={th}>ล็อต</th>
-                <th className={th}>ซื้อ กก.</th>
+                <th className={th}>น้ำหนัก</th>
                 <th className={th}>% เพิ่ม/ลด</th>
                 <th className={th}>กำไร/ขาดทุน</th>
               </tr>
@@ -430,6 +483,48 @@ export default async function MonthlyPage({
           </table>
         </section>
       </div>
+
+      {/* buyer comparison */}
+      <section>
+        <h2 className="font-bold mb-2">เปรียบเทียบตามผู้ซื้อ</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse bg-white">
+            <thead>
+              <tr>
+                <th className={th}>ผู้ซื้อ</th>
+                <th className={th}>ล็อต</th>
+                <th className={th}>น้ำหนัก</th>
+                <th className={th}>ยอดขาย</th>
+              </tr>
+            </thead>
+            <tbody>
+              {buyerRows.length === 0 && (
+                <tr>
+                  <td className={`${td} text-center text-gray-500`} colSpan={4}>
+                    ไม่มีข้อมูล
+                  </td>
+                </tr>
+              )}
+              {buyerRows.map(([name, v]) => (
+                <tr key={name}>
+                  <td className={td}>{name}</td>
+                  <td className={tdR}>{v.lots.size}</td>
+                  <td className={tdR}>{fmt(v.sellKg)}</td>
+                  <td className={tdR}>{fmt(v.sales)}</td>
+                </tr>
+              ))}
+              {buyerRows.length > 0 && (
+                <tr className="font-semibold bg-gray-50">
+                  <td className={td}>รวม</td>
+                  <td className={tdR}></td>
+                  <td className={tdR}>{fmt(buyerTotals.sellKg)}</td>
+                  <td className={tdR}>{fmt(buyerTotals.sales)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* charts */}
       <section className="no-print">

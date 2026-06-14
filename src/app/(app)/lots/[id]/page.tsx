@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { calcLot } from "@/lib/calc";
+import { calcLot, feeInputValue, sellLineFee } from "@/lib/calc";
 import { addDaysISO, formatBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import {
@@ -8,6 +8,7 @@ import {
   addBuyLine,
   addExpense,
   addSellLine,
+  bulkUpdateSellFee,
   deleteAdjustment,
   deleteBuyLine,
   deleteExpense,
@@ -41,11 +42,13 @@ export default async function LotPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: lot }, { data: sizes }, { data: cats }] = await Promise.all([
-    supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
-    supabase.from("sizes").select("*").order("sort_order"),
-    supabase.from("expense_categories").select("name").order("name"),
-  ]);
+  const [{ data: lot }, { data: sizes }, { data: cats }, { data: buyerRows }] =
+    await Promise.all([
+      supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
+      supabase.from("sizes").select("*").order("sort_order"),
+      supabase.from("expense_categories").select("name").order("name"),
+      supabase.from("sell_lines").select("buyer"),
+    ]);
   if (!lot) notFound();
   const l = lot as LotWithChildren;
   const sizeList = (sizes ?? []) as Size[];
@@ -55,6 +58,13 @@ export default async function LotPage({
       ...((cats ?? []) as { name: string }[]).map((c) => c.name),
     ]),
   ];
+  const buyerNames = [
+    ...new Set(
+      ((buyerRows ?? []) as { buyer: string }[])
+        .map((r) => r.buyer)
+        .filter(Boolean)
+    ),
+  ].sort();
 
   const byCreated = (a: { created_at: string }, b: { created_at: string }) =>
     a.created_at.localeCompare(b.created_at);
@@ -70,8 +80,8 @@ export default async function LotPage({
   const sizeOptions = sizeList.map((sz) => ({ value: sz.code, label: sz.label }));
 
   const headline: [string, string, string?][] = [
-    ["ซื้อ กก.", fmt(s.buyKg)],
-    ["ขาย กก.", fmt(s.sellKg)],
+    ["น้ำหนัก", fmt(s.buyKg)],
+    ["น้ำหนัก", fmt(s.sellKg)],
     ["น้ำหนักเพิ่ม/ลด กก.", fmt(s.headlineDiffKg), pctClass(s.headlineDiffKg)],
     ["% เพิ่ม/ลด", fmtPct(s.headlinePct), pctClass(s.headlinePct)],
     ["ยอดขายสุทธิ", fmt(s.netSales)],
@@ -125,8 +135,8 @@ export default async function LotPage({
 
       {/* headline summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {headline.map(([label, value, cls]) => (
-          <div key={label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        {headline.map(([label, value, cls], i) => (
+          <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
             <div className="text-xs text-gray-500">{label}</div>
             <div className={`text-lg font-semibold ${cls ?? ""}`}>{value}</div>
           </div>
@@ -141,8 +151,8 @@ export default async function LotPage({
             <thead>
               <tr>
                 <th className={th}>รายการ</th>
-                <th className={th}>ซื้อ กก.</th>
-                <th className={th}>ขาย กก.</th>
+                <th className={th}>น้ำหนัก</th>
+                <th className={th}>น้ำหนัก</th>
                 <th className={th}>น้ำหนักเพิ่ม/ลด กก.</th>
                 <th className={th}>% เพิ่ม/ลด</th>
                 <th className={th}>ต้นทุนซื้อ</th>
@@ -204,9 +214,9 @@ export default async function LotPage({
                 <th className={th}>ตู้</th>
                 <th className={th}>เบอร์</th>
                 <th className={th}>รายการ</th>
-                <th className={th}>ตัว/กก.</th>
-                <th className={th}>ซื้อ กก.</th>
-                <th className={th}>ต้นทุน/กก.</th>
+                <th className={th}>ไซด์</th>
+                <th className={th}>น้ำหนัก</th>
+                <th className={th}>ราคา</th>
                 <th className={th}>ต้นทุนซื้อ</th>
                 <th className={th}>หมายเหตุ</th>
                 <th className={`${th} no-print`}></th>
@@ -259,15 +269,15 @@ export default async function LotPage({
             <input name="description" placeholder="เช่น No.0" className={input} />
           </label>
           <label className="text-xs text-gray-600">
-            ตัว/กก.
+            ไซด์
             <input name="density" placeholder="เช่น 87-88" className={input} />
           </label>
           <label className="text-xs text-gray-600">
-            ซื้อ กก.
+            น้ำหนัก
             <input name="weight_kg" required inputMode="decimal" className={input} />
           </label>
           <label className="text-xs text-gray-600">
-            ต้นทุน/กก.
+            ราคา
             <input name="cost_per_kg" required inputMode="decimal" className={input} />
           </label>
           <label className="text-xs text-gray-600">
@@ -282,19 +292,43 @@ export default async function LotPage({
 
       {/* sell lines */}
       <section>
-        <h2 className="font-bold mb-2">รายละเอียดขาย</h2>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h2 className="font-bold">รายละเอียดขาย</h2>
+          {sells.length > 0 && (
+            <form
+              action={bulkUpdateSellFee}
+              className="no-print flex items-end gap-2 ml-auto"
+            >
+              <input type="hidden" name="lot_id" value={l.id} />
+              <label className="text-xs text-gray-600">
+                ตั้งค่าธรรมเนียมทุกรายการ
+                <input
+                  name="fee"
+                  defaultValue="1.2%"
+                  placeholder="1.2% หรือจำนวนเงิน"
+                  className={`${input} w-40`}
+                />
+              </label>
+              <button className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
+                ใช้กับทุกรายการ
+              </button>
+            </form>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse bg-white">
             <thead>
               <tr>
                 <th className={th}>วันที่ขาย</th>
+                <th className={th}>ผู้ซื้อ</th>
                 <th className={th}>ตู้</th>
                 <th className={th}>เบอร์</th>
                 <th className={th}>รายการ</th>
-                <th className={th}>ตัว/กก.</th>
-                <th className={th}>ขาย กก.</th>
+                <th className={th}>ไซด์</th>
+                <th className={th}>น้ำหนัก</th>
                 <th className={th}>ราคา</th>
                 <th className={th}>ยอดขาย</th>
+                <th className={th}>ค่าธรรมเนียม</th>
                 <th className={`${th} no-print`}></th>
               </tr>
             </thead>
@@ -308,6 +342,7 @@ export default async function LotPage({
                   deleteSlot={<DeleteButton action={deleteSellLine.bind(null, sl.id, l.id)} />}
                   fields={[
                     { name: "sell_date", value: sl.sell_date, display: formatBE(sl.sell_date), type: "date" },
+                    { name: "buyer", value: sl.buyer, display: sl.buyer },
                     { name: "container", value: sl.container, display: sl.container },
                     { name: "size_code", value: sl.size_code, display: sl.size_code, options: sizeOptions },
                     { name: "description", value: sl.description, display: sl.description },
@@ -315,6 +350,7 @@ export default async function LotPage({
                     { name: "weight_kg", value: String(sl.weight_kg), display: fmt(Number(sl.weight_kg)), right: true, inputMode: "decimal" },
                     { name: "price_per_kg", value: String(sl.price_per_kg), display: fmt(Number(sl.price_per_kg)), right: true, inputMode: "decimal" },
                     { display: fmt(Number(sl.weight_kg) * Number(sl.price_per_kg)), right: true },
+                    { name: "fee", value: feeInputValue(sl), display: fmt(sellLineFee(sl)), right: true },
                   ]}
                 />
               ))}
@@ -323,12 +359,21 @@ export default async function LotPage({
         </div>
         <form
           action={addSellLine}
-          className="no-print mt-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 items-end bg-white border border-gray-200 rounded-lg p-3"
+          className="no-print mt-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-2 items-end bg-white border border-gray-200 rounded-lg p-3"
         >
           <input type="hidden" name="lot_id" value={l.id} />
           <label className="text-xs text-gray-600">
             วันที่ขาย
             <input name="sell_date" type="date" required defaultValue={addDaysISO(l.buy_date, 1)} className={input} />
+          </label>
+          <label className="text-xs text-gray-600">
+            ผู้ซื้อ
+            <input name="buyer" list="buyer-list" placeholder="ชื่อผู้ซื้อ" className={input} />
+            <datalist id="buyer-list">
+              {buyerNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </label>
           <label className="text-xs text-gray-600">
             ตู้
@@ -349,16 +394,20 @@ export default async function LotPage({
             <input name="description" placeholder="เช่น (ดี)" className={input} />
           </label>
           <label className="text-xs text-gray-600">
-            ตัว/กก.
+            ไซด์
             <input name="density" placeholder="เช่น 75.87" className={input} />
           </label>
           <label className="text-xs text-gray-600">
-            ขาย กก.
+            น้ำหนัก
             <input name="weight_kg" required inputMode="decimal" className={input} />
           </label>
           <label className="text-xs text-gray-600">
             ราคา/กก.
             <input name="price_per_kg" required inputMode="decimal" className={input} />
+          </label>
+          <label className="text-xs text-gray-600">
+            ค่าธรรมเนียม
+            <input name="fee" defaultValue="1.2%" placeholder="1.2% หรือจำนวนเงิน" className={input} />
           </label>
           <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มขาย
@@ -447,6 +496,14 @@ export default async function LotPage({
                   </td>
                 </tr>
               ))}
+              {s.feeTotal > 0 && (
+                <tr>
+                  <td className={td}>ค่าธรรมเนียม (จากการขาย)</td>
+                  <td className={tdR}>{fmt(s.feeTotal)}</td>
+                  <td className={td}>คำนวณอัตโนมัติจากแต่ละรายการขาย</td>
+                  <td className={`${td} no-print`}></td>
+                </tr>
+              )}
               <tr className="font-semibold bg-gray-50">
                 <td className={td}>รวม</td>
                 <td className={tdR}>{fmt(s.expenseTotal)}</td>

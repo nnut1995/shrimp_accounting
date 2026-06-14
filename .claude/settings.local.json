@@ -9,7 +9,9 @@
       "Bash(pkill -f \"next-server\")",
       "Bash(perl -e 'select\\(undef,undef,undef,1\\)')",
       "Bash(curl -s -o /dev/null -w \"after cleanup: %{http_code}\\\\n\" --max-time 3 http://localhost:3000/)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(perl -i -pe 's/ต้นทุน\\\\/กก\\\\./ราคา/g' \"src/app/\\(app\\)/lots/[id]/page.tsx\")",
+      "Bash(perl -i -pe 's/ตัว\\\\/กก\\\\./ไซด์/g' \"src/app/\\(app\\)/lots/[id]/page.tsx\")"
     ]
   }
 }

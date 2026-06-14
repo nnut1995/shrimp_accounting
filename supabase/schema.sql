@@ -50,8 +50,18 @@ create table sell_lines (
   density text not null default '',
   weight_kg numeric(12,2) not null default 0,
   price_per_kg numeric(12,2) not null default 0,
+  -- ผู้ซื้อ: who bought this line (free text, used for buyer stats)
+  buyer text not null default '',
+  -- ค่าธรรมเนียม per line: percentage of this line's sales (default 1.2%) or an
+  -- explicit baht override (fee_amount wins when set). NULL fee_pct = 1.2%.
+  fee_pct numeric(7,4) default 1.2,
+  fee_amount numeric(14,2),
   created_at timestamptz not null default now()
 );
+-- migration for existing databases:
+-- alter table sell_lines add column fee_pct numeric(7,4) default 1.2;
+-- alter table sell_lines add column fee_amount numeric(14,2);
+-- alter table sell_lines add column buyer text not null default '';
 
 create table adjustments (
   id uuid primary key default gen_random_uuid(),
