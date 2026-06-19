@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -74,6 +75,11 @@ export default function LoginPage() {
         >
           {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>
+        <p className="text-center text-sm">
+          <Link href="/calculator" className="text-blue-700 hover:underline">
+            โปรแกรมคำนวณไซส์กุ้ง →
+          </Link>
+        </p>
       </form>
     </main>
   );

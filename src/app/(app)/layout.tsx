@@ -27,6 +27,9 @@ export default async function AppLayout({
           <Link href="/monthly" className="text-blue-700 hover:underline">
             สรุปรายเดือน
           </Link>
+          <Link href="/calculator" className="text-blue-700 hover:underline">
+            คำนวณไซส์
+          </Link>
           <form action={signOut} className="ml-auto">
             <button className="text-gray-500 hover:text-gray-800">
               ออกจากระบบ

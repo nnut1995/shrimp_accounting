@@ -1,7 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Paths that are reachable without authentication.
+const PUBLIC_PATHS = ["/calculator"];
+
 export default async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,7 +37,7 @@ export default async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  const isLoginPage = pathname.startsWith("/login");
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
