@@ -94,6 +94,17 @@ create table monthly_expenses (
   created_at timestamptz not null default now()
 );
 
+-- Saved shrimp size calculator sheets (per user). The full editor state is
+-- stored as jsonb in `data`; see src/app/calculator/types.ts (CalcSheetData).
+create table calc_sheets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  title text not null default '',
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Seed fixed size list
 insert into sizes (code, label, sort_order) values
   ('0', '0', 1),
@@ -126,6 +137,8 @@ alter table sell_lines enable row level security;
 alter table adjustments enable row level security;
 alter table expenses enable row level security;
 alter table monthly_expenses enable row level security;
+-- calc_sheets is per-user (unlike the shared single-tenant tables above)
+alter table calc_sheets enable row level security;
 
 create policy "authenticated full access" on suppliers for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on expense_categories for all to authenticated using (true) with check (true);
@@ -136,6 +149,9 @@ create policy "authenticated full access" on sell_lines for all to authenticated
 create policy "authenticated full access" on adjustments for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on expenses for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on monthly_expenses for all to authenticated using (true) with check (true);
+-- each user sees and edits only their own calculator sheets
+create policy "own calc sheets" on calc_sheets for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create index buy_lines_lot_idx on buy_lines (lot_id);
 create index sell_lines_lot_idx on sell_lines (lot_id);
@@ -143,3 +159,4 @@ create index adjustments_lot_idx on adjustments (lot_id);
 create index expenses_lot_idx on expenses (lot_id);
 create index lots_buy_date_idx on lots (buy_date);
 create index monthly_expenses_ym_idx on monthly_expenses (year, month);
+create index calc_sheets_user_idx on calc_sheets (user_id, updated_at desc);

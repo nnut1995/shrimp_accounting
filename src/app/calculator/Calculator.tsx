@@ -1,42 +1,41 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { deleteSheet, saveSheet, updateSheet } from "./actions";
+import type {
+  AnyCalcSheetData,
+  CalcSheet,
+  CalcSheetData,
+  Field,
+  Row,
+  Top,
+  TopField,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Model
 //
+// A sheet = one lot (shared top totals) split into several "breakdowns"
+// (ทางเลือก). Each breakdown has its own size rows, prices and growth %, and is
+// solved independently against the shared totals so they can be compared.
+//
 // Each row exposes four flexible fields. The user pins any two and the other
 // two are derived. `weight` and `percent` are two views of the same axis, so
-// they can never both be pinned at once (see ALIAS). The top totals behave the
-// same way over {count, kg, size}.
+// they can never both be pinned at once (see ALIAS).
 // ---------------------------------------------------------------------------
 
-type Field = "size" | "percent" | "count" | "weight";
 const FIELDS: Field[] = ["size", "percent", "count", "weight"];
 const ALIAS: Partial<Record<Field, Field>> = { weight: "percent", percent: "weight" };
-
-type TopField = "count" | "kg" | "size";
 const TOP_FIELDS: TopField[] = ["count", "kg", "size"];
-
-type Row = {
-  id: number;
-  label: string;
-  labelCustom: boolean;
-  isBalance: boolean;
-  raw: Record<Field, string>; // literal text for pinned fields
-  pins: Field[]; // ordered, max 2
-  price: string;
-};
-
-type Top = {
-  raw: Record<TopField, string>;
-  pins: TopField[];
-};
 
 type Eff = { size: number | null; percent: number | null; count: number | null; weight: number | null };
 type TopEff = { count: number | null; kg: number | null; size: number | null };
 
+type Breakdown = { id: number; name: string; rows: Row[]; growth: string };
+
 const emptyFieldRaw = (): Record<Field, string> => ({ size: "", percent: "", count: "", weight: "" });
+const emptyTop = (): Top => ({ raw: { count: "", kg: "", size: "" }, pins: [] });
 
 function newRow(id: number): Row {
   return { id, label: "", labelCustom: false, isBalance: false, raw: emptyFieldRaw(), pins: [], price: "" };
@@ -63,6 +62,10 @@ function dash(n: number | null, digits = 4): string {
 function fmtPlain(n: number | null, digits = 4): string {
   if (n === null || !isFinite(n)) return "";
   return Number(n.toFixed(digits)).toString();
+}
+
+function fmtDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
 }
 
 // ---------------------------------------------------------------------------
@@ -189,24 +192,79 @@ const th = "px-2 py-2 text-xs font-semibold text-gray-500 whitespace-nowrap text
 const thL = "px-2 py-2 text-xs font-semibold text-gray-500 whitespace-nowrap text-left";
 const td = "px-2 py-2 border-t border-gray-200 align-middle text-right";
 const tdL = "px-2 py-2 border-t border-gray-200 align-middle text-left";
+const btn = "rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50";
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function Calculator() {
-  const idRef = useRef(2);
-  const [rows, setRows] = useState<Row[]>(() => [newRow(1), newRow(2)]);
-  const [top, setTop] = useState<Top>({ raw: { count: "", kg: "", size: "" }, pins: [] });
-  const [growth, setGrowth] = useState("");
+export default function Calculator({
+  isLoggedIn,
+  initialSheets,
+}: {
+  isLoggedIn: boolean;
+  initialSheets: CalcSheet[];
+}) {
+  const rowIdRef = useRef(0);
+  const bdIdRef = useRef(0);
+  function freshRow(): Row {
+    rowIdRef.current += 1;
+    return newRow(rowIdRef.current);
+  }
+  function freshBreakdown(name: string): Breakdown {
+    bdIdRef.current += 1;
+    return { id: bdIdRef.current, name, rows: [freshRow(), freshRow()], growth: "" };
+  }
+
+  const [top, setTop] = useState<Top>(emptyTop());
+  const [breakdowns, setBreakdowns] = useState<Breakdown[]>(() => [freshBreakdown("ทางเลือก 1")]);
+  const [activeId, setActiveId] = useState(1);
   const [showSummary, setShowSummary] = useState(false);
 
-  const c = useMemo(() => compute(rows, top, growth), [rows, top, growth]);
+  // History / persistence
+  const [sheets, setSheets] = useState<CalcSheet[]>(initialSheets);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Solve every breakdown against the shared totals (for the compare bar);
+  // the active one drives the editor below.
+  const computedAll = useMemo(() => {
+    const m = new Map<number, Computed>();
+    breakdowns.forEach((b) => m.set(b.id, compute(b.rows, top, b.growth)));
+    return m;
+  }, [breakdowns, top]);
+
+  const active = breakdowns.find((b) => b.id === activeId) ?? breakdowns[0];
+  const c = computedAll.get(active.id)!;
+
+  const finals = breakdowns
+    .map((b) => computedAll.get(b.id)?.finalPrice)
+    .filter((v): v is number => v != null && isFinite(v));
+  const bestFinal = finals.length ? Math.min(...finals) : null;
+
+  // A "บันทึกแล้ว" status is only valid until the next edit.
+  useEffect(() => {
+    setStatus("");
+  }, [breakdowns, top, title]);
 
   const labelOf = (row: Row, idx: number) =>
     row.labelCustom && row.label.trim() !== "" ? row.label : String(idx + 1);
 
-  // --- handlers ---------------------------------------------------------------
+  // --- mutate the active breakdown --------------------------------------------
+
+  function updateActiveRows(updater: (rows: Row[]) => Row[]) {
+    setBreakdowns((prev) => prev.map((b) => (b.id === activeId ? { ...b, rows: updater(b.rows) } : b)));
+  }
+
+  function setActiveGrowth(value: string) {
+    setBreakdowns((prev) => prev.map((b) => (b.id === activeId ? { ...b, growth: value } : b)));
+  }
+
+  // --- field handlers ---------------------------------------------------------
 
   function onTopInput(field: TopField, value: string) {
     setTop((prev) => {
@@ -227,8 +285,8 @@ export default function Calculator() {
   }
 
   function onFieldInput(rowId: number, field: Field, value: string) {
-    setRows((prev) =>
-      prev.map((row) => {
+    updateActiveRows((rows) =>
+      rows.map((row) => {
         if (row.id !== rowId) return row;
         const r: Row = { ...row, raw: { ...row.raw }, pins: [...row.pins] };
         // Typing in a balance row means taking manual control of it.
@@ -257,21 +315,19 @@ export default function Calculator() {
   }
 
   function onLabelInput(rowId: number, value: string) {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === rowId ? { ...row, label: value, labelCustom: value.trim() !== "" } : row
-      )
+    updateActiveRows((rows) =>
+      rows.map((row) => (row.id === rowId ? { ...row, label: value, labelCustom: value.trim() !== "" } : row))
     );
   }
 
   function onPriceInput(rowId: number, value: string) {
-    setRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, price: value } : row)));
+    updateActiveRows((rows) => rows.map((row) => (row.id === rowId ? { ...row, price: value } : row)));
   }
 
   function toggleBalance(rowId: number) {
-    setRows((prev) => {
-      const wasBalance = prev.find((r) => r.id === rowId)?.isBalance ?? false;
-      return prev.map((r) => {
+    updateActiveRows((rows) => {
+      const wasBalance = rows.find((r) => r.id === rowId)?.isBalance ?? false;
+      return rows.map((r) => {
         if (r.id === rowId) {
           if (wasBalance) return { ...r, isBalance: false };
           return { ...r, isBalance: true, pins: [], raw: emptyFieldRaw() };
@@ -282,12 +338,137 @@ export default function Calculator() {
   }
 
   function addRow() {
-    idRef.current += 1;
-    setRows((prev) => [...prev, newRow(idRef.current)]);
+    const r = freshRow();
+    updateActiveRows((rows) => [...rows, r]);
   }
 
   function deleteRow(rowId: number) {
-    setRows((prev) => prev.filter((r) => r.id !== rowId));
+    updateActiveRows((rows) => rows.filter((r) => r.id !== rowId));
+  }
+
+  // --- breakdown management ---------------------------------------------------
+
+  function addBreakdown() {
+    const b = freshBreakdown(`ทางเลือก ${breakdowns.length + 1}`);
+    setBreakdowns((prev) => [...prev, b]);
+    setActiveId(b.id);
+  }
+
+  function deleteBreakdown(id: number) {
+    if (breakdowns.length <= 1) return;
+    if (!confirm("ลบทางเลือกนี้?")) return;
+    const next = breakdowns.filter((b) => b.id !== id);
+    setBreakdowns(next);
+    if (id === activeId) setActiveId(next[0].id);
+  }
+
+  function renameBreakdown(id: number, name: string) {
+    setBreakdowns((prev) => prev.map((b) => (b.id === id ? { ...b, name } : b)));
+  }
+
+  // --- history / persistence handlers ----------------------------------------
+
+  function serialize(): CalcSheetData {
+    return {
+      version: 2,
+      top,
+      breakdowns: breakdowns.map((b) => ({
+        name: b.name,
+        rows: b.rows.map((r) => ({
+          label: r.label,
+          labelCustom: r.labelCustom,
+          isBalance: r.isBalance,
+          raw: r.raw,
+          pins: r.pins,
+          price: r.price,
+        })),
+        growth: b.growth,
+      })),
+      summary: {
+        totalSize: c.topEff.size,
+        breakdownCount: breakdowns.length,
+        bestFinalPrice: bestFinal,
+      },
+    };
+  }
+
+  function defaultTitle(): string {
+    const d = new Date().toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+    return c.topEff.size != null ? `${d} · ${fmtNum(c.topEff.size)} ตัว/กก.` : d;
+  }
+
+  // Rebuild breakdowns with fresh runtime ids; migrate legacy v1 sheets into a
+  // single breakdown.
+  function breakdownsFromData(d: AnyCalcSheetData): Breakdown[] {
+    const list: { name: string; rows: Omit<Row, "id">[]; growth: string }[] =
+      "breakdowns" in d && Array.isArray(d.breakdowns)
+        ? d.breakdowns
+        : "rows" in d
+          ? [{ name: "ทางเลือก 1", rows: d.rows ?? [], growth: d.growth ?? "" }]
+          : [];
+    return list.map((bd, i) => {
+      bdIdRef.current += 1;
+      const rows: Row[] = (bd.rows ?? []).map((r) => {
+        rowIdRef.current += 1;
+        return { ...r, id: rowIdRef.current };
+      });
+      if (rows.length === 0) rows.push(freshRow());
+      return { id: bdIdRef.current, name: bd.name || `ทางเลือก ${i + 1}`, rows, growth: bd.growth ?? "" };
+    });
+  }
+
+  function loadSheet(sheet: CalcSheet) {
+    const bds = breakdownsFromData(sheet.data);
+    setBreakdowns(bds);
+    setActiveId(bds[0].id);
+    setTop(sheet.data.top ?? emptyTop());
+    setTitle(sheet.title);
+    setCurrentId(sheet.id);
+    setHistoryOpen(false);
+    setError("");
+  }
+
+  function resetEditor() {
+    const b = freshBreakdown("ทางเลือก 1");
+    setBreakdowns([b]);
+    setActiveId(b.id);
+    setTop(emptyTop());
+    setTitle("");
+    setCurrentId(null);
+    setError("");
+  }
+
+  async function handleSave() {
+    if (!isLoggedIn) return;
+    setSaving(true);
+    setError("");
+    try {
+      const data = serialize();
+      const finalTitle = title.trim() || defaultTitle();
+      const saved = currentId
+        ? await updateSheet(currentId, finalTitle, data)
+        : await saveSheet(finalTitle, data);
+      setCurrentId(saved.id);
+      setTitle(saved.title);
+      setSheets((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
+      setStatus("บันทึกแล้ว");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteSheet(id: string) {
+    if (!confirm("ลบรายการนี้?")) return;
+    setError("");
+    try {
+      await deleteSheet(id);
+      setSheets((prev) => prev.filter((s) => s.id !== id));
+      if (currentId === id) setCurrentId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
+    }
   }
 
   // --- render helpers ---------------------------------------------------------
@@ -326,11 +507,63 @@ export default function Calculator() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">โปรแกรมคำนวณไซส์กุ้ง</h1>
-        <p className="text-sm text-gray-500 mt-1">กรอกจำนวนกุ้งและน้ำหนักรวม จากนั้นแยกย่อยตามไซส์</p>
+        <p className="text-sm text-gray-500 mt-1">
+          กรอกยอดรวมของล็อต แล้วลองแยกไซส์หลายทางเลือกเพื่อเปรียบเทียบราคาที่ควรซื้อ
+        </p>
       </div>
 
-      {/* Totals */}
+      {/* Save / history toolbar */}
       <div className={card}>
+        {isLoggedIn ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="ชื่อล็อต (เว้นว่างเพื่อใช้ชื่ออัตโนมัติ)"
+                className={`${baseInput} flex-1 min-w-48`}
+              />
+              <button type="button" onClick={handleSave} disabled={saving} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
+                {saving ? "กำลังบันทึก..." : currentId ? "บันทึก" : "บันทึกใหม่"}
+              </button>
+              {currentId && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentId(null)}
+                  disabled={saving}
+                  title="บันทึกเป็นรายการใหม่แทนการทับของเดิม"
+                  className={`${btn} border border-gray-300 bg-white hover:bg-gray-100`}
+                >
+                  บันทึกเป็นใหม่
+                </button>
+              )}
+              <button type="button" onClick={() => setHistoryOpen(true)} className={`${btn} border border-gray-300 bg-white hover:bg-gray-100`}>
+                ประวัติ ({sheets.length})
+              </button>
+              <button type="button" onClick={resetEditor} className={`${btn} border border-gray-300 bg-white hover:bg-gray-100`}>
+                ล้าง/ใหม่
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm min-h-5">
+              {currentId && <span className="text-gray-500">● กำลังแก้ไขล็อตที่บันทึกไว้</span>}
+              {status && <span className="text-green-600">{status}</span>}
+              {error && <span className="text-red-600">{error}</span>}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-600">
+            <Link href="/login" className="text-blue-700 hover:underline font-medium">
+              เข้าสู่ระบบ
+            </Link>{" "}
+            เพื่อบันทึกและดูประวัติการคำนวณย้อนหลัง
+          </p>
+        )}
+      </div>
+
+      {/* Shared lot totals */}
+      <div className={card}>
+        <div className="text-xs text-gray-500 font-semibold mb-2 tracking-wide">ยอดรวมของล็อต (ใช้ร่วมกันทุกทางเลือก)</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {TOP_FIELDS.map((f) => {
             const v = topView(f);
@@ -359,8 +592,52 @@ export default function Calculator() {
         </div>
       </div>
 
-      {/* Size breakdown */}
-      <div className={card}>
+      {/* Breakdown tabs + active editor */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {breakdowns.map((b) => {
+          const isActive = b.id === active.id;
+          return (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setActiveId(b.id)}
+              className={`rounded-t-lg px-3 py-2 text-sm font-medium border ${
+                isActive ? "bg-white border-gray-200 border-b-white text-blue-700" : "bg-gray-100 border-transparent text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {b.name || "(ไม่มีชื่อ)"}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={addBreakdown}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+        >
+          + เพิ่มทางเลือก
+        </button>
+      </div>
+
+      <div className={`${card} -mt-4 rounded-tl-none`}>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <input
+            type="text"
+            value={active.name}
+            onChange={(e) => renameBreakdown(active.id, e.target.value)}
+            placeholder="ชื่อทางเลือก"
+            className={`${baseInput} max-w-xs`}
+          />
+          <button
+            type="button"
+            onClick={() => deleteBreakdown(active.id)}
+            disabled={breakdowns.length <= 1}
+            className={`${btn} border border-gray-300 bg-white hover:bg-gray-100 text-red-600`}
+          >
+            ลบทางเลือกนี้
+          </button>
+        </div>
+
+        {/* Size breakdown */}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -374,7 +651,7 @@ export default function Calculator() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, idx) => (
+              {active.rows.map((row, idx) => (
                 <tr key={row.id} className={row.isBalance ? "bg-blue-50" : undefined}>
                   <td className={tdL}>
                     <input
@@ -439,55 +716,124 @@ export default function Calculator() {
             </tfoot>
           </table>
         </div>
-        <button
-          type="button"
-          onClick={addRow}
-          className="mt-3 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700"
-        >
-          + เพิ่มไซส์
-        </button>
+        <div className="mt-3 flex flex-col gap-2">
+          <button type="button" onClick={addRow} className={`${btn} w-full bg-blue-600 text-white hover:bg-blue-700`}>
+            + เพิ่มไซส์
+          </button>
+          <button type="button" onClick={() => setShowSummary(true)} className={`${btn} w-full bg-gray-900 text-white hover:bg-gray-800`}>
+            ดูสรุปทางเลือกนี้
+          </button>
+        </div>
         <p className={`text-xs mt-2 ${c.over ? "text-red-600" : "text-gray-500"}`}>
           {c.over
             ? "คำเตือน: ค่าที่ระบุเกินยอดรวม"
             : "หมายเหตุ: กรอกค่าใดก็ได้ 2 ช่องในแต่ละแถว ระบบจะคำนวณอีก 2 ช่องที่เหลือให้อัตโนมัติ"}
         </p>
+
+        {/* Price */}
+        <div className="mt-5 pt-4 border-t border-gray-200">
+          <h2 className="text-base font-bold mb-3">ราคา</h2>
+          {active.rows.length === 0 ? (
+            <p className="text-center text-gray-500 text-sm py-3">ยังไม่มีรายการ เพิ่มไซส์ในส่วนด้านบนก่อน</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className={`${thL} w-20`}>เบอร์</th>
+                    <th className={th}>ไซส์ (ตัว/กก.)</th>
+                    <th className={th}>% ของน้ำหนัก</th>
+                    <th className={th}>ราคา/กก. (฿)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {active.rows.map((row, idx) => {
+                    const e = c.eff.get(row.id);
+                    return (
+                      <tr key={row.id}>
+                        <td className={tdL}>{labelOf(row, idx)}</td>
+                        <td className={`${td} font-semibold`}>{dash(e?.size ?? null)}</td>
+                        <td className={`${td} font-semibold`}>{e?.percent != null ? `${fmtNum(e.percent)}%` : "—"}</td>
+                        <td className={td}>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="0.01"
+                            placeholder="เช่น 200"
+                            value={row.price}
+                            onChange={(ev) => onPriceInput(row.id, ev.target.value)}
+                            className={`${baseInput} min-w-24 text-right`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end mt-4">
+            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-center">
+              <div className="text-xl font-semibold text-blue-700">{c.hasAnyPriced ? fmtNum(c.avgPerKg) : "—"}</div>
+              <div className="text-xs text-gray-500">ราคาเฉลี่ย (฿/กก.)</div>
+            </div>
+            <div>
+              <label className={fieldLabel} htmlFor="growth">
+                % น้ำหนักเพิ่ม (เติบโต)
+              </label>
+              <input
+                id="growth"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.1"
+                placeholder="เช่น 10"
+                value={active.growth}
+                onChange={(e) => setActiveGrowth(e.target.value)}
+                className={baseInput}
+              />
+            </div>
+            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-center">
+              <div className="text-xl font-semibold text-blue-700">{c.hasAnyPriced ? fmtNum(c.finalPrice!) : "—"}</div>
+              <div className="text-xs text-gray-500">ราคาที่ควรซื้อก่อนหักค่าใช้จ่าย (฿/กก.)</div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Price */}
-      <div className={card}>
-        <h2 className="text-base font-bold mb-3">ราคา</h2>
-        {rows.length === 0 ? (
-          <p className="text-center text-gray-500 text-sm py-3">ยังไม่มีรายการ เพิ่มไซส์ในส่วนด้านบนก่อน</p>
-        ) : (
+      {/* Compare bar */}
+      {breakdowns.length > 1 && (
+        <div className={card}>
+          <div className="text-xs text-gray-500 font-semibold mb-2 tracking-wide">เปรียบเทียบทางเลือก</div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={`${thL} w-20`}>เบอร์</th>
-                  <th className={th}>ไซส์ (ตัว/กก.)</th>
-                  <th className={th}>% ของน้ำหนัก</th>
-                  <th className={th}>ราคา/กก. (฿)</th>
+                  <th className={thL}>ทางเลือก</th>
+                  <th className={th}>ราคาเฉลี่ย (฿/กก.)</th>
+                  <th className={th}>ราคาที่ควรซื้อ (฿/กก.)</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => {
-                  const e = c.eff.get(row.id);
+                {breakdowns.map((b) => {
+                  const bc = computedAll.get(b.id)!;
+                  const isActive = b.id === active.id;
+                  const isBest = bestFinal != null && bc.finalPrice != null && Math.abs(bc.finalPrice - bestFinal) < 1e-9;
                   return (
-                    <tr key={row.id}>
-                      <td className={tdL}>{labelOf(row, idx)}</td>
-                      <td className={`${td} font-semibold`}>{dash(e?.size ?? null)}</td>
-                      <td className={`${td} font-semibold`}>{e?.percent != null ? `${fmtNum(e.percent)}%` : "—"}</td>
-                      <td className={td}>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min={0}
-                          step="0.01"
-                          placeholder="เช่น 200"
-                          value={row.price}
-                          onChange={(ev) => onPriceInput(row.id, ev.target.value)}
-                          className={`${baseInput} min-w-24 text-right`}
-                        />
+                    <tr
+                      key={b.id}
+                      onClick={() => setActiveId(b.id)}
+                      className={`cursor-pointer ${isActive ? "bg-blue-50" : "hover:bg-gray-50"}`}
+                    >
+                      <td className={tdL}>
+                        {b.name || "(ไม่มีชื่อ)"}
+                        {isBest && <span className="ml-2 text-xs text-green-700 font-semibold">ดีสุด</span>}
+                      </td>
+                      <td className={td}>{bc.hasAnyPriced ? fmtNum(bc.avgPerKg) : "—"}</td>
+                      <td className={`${td} font-semibold ${isBest ? "text-green-700" : ""}`}>
+                        {bc.hasAnyPriced ? fmtNum(bc.finalPrice!) : "—"}
                       </td>
                     </tr>
                   );
@@ -495,62 +841,114 @@ export default function Calculator() {
               </tbody>
             </table>
           </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end mt-4 pt-4 border-t border-gray-200">
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-center">
-            <div className="text-xl font-semibold text-blue-700">{c.hasAnyPriced ? fmtNum(c.avgPerKg) : "—"}</div>
-            <div className="text-xs text-gray-500">ราคาเฉลี่ย (฿/กก.)</div>
-          </div>
-          <div>
-            <label className={fieldLabel} htmlFor="growth">
-              % น้ำหนักเพิ่ม (เติบโต)
-            </label>
-            <input
-              id="growth"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.1"
-              placeholder="เช่น 10"
-              value={growth}
-              onChange={(e) => setGrowth(e.target.value)}
-              className={baseInput}
-            />
-          </div>
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-center">
-            <div className="text-xl font-semibold text-blue-700">
-              {c.hasAnyPriced ? fmtNum(c.finalPrice!) : "—"}
-            </div>
-            <div className="text-xs text-gray-500">ราคาที่ควรซื้อก่อนหักค่าใช้จ่าย (฿/กก.)</div>
-          </div>
+          <p className="text-xs text-gray-500 mt-2">ราคาที่ควรซื้อยิ่งต่ำยิ่งดี (ต้นทุนรับซื้อถูกกว่า)</p>
         </div>
+      )}
 
-        <button
-          type="button"
-          onClick={() => setShowSummary(true)}
-          className="mt-4 w-full bg-gray-900 text-white rounded-lg py-3 text-sm font-semibold hover:bg-gray-800"
-        >
-          ดูสรุป
-        </button>
-      </div>
-
-      {showSummary && <SummaryModal rows={rows} c={c} growth={growth} labelOf={labelOf} onClose={() => setShowSummary(false)} />}
+      {showSummary && (
+        <SummaryModal name={active.name} rows={active.rows} c={c} growth={active.growth} labelOf={labelOf} onClose={() => setShowSummary(false)} />
+      )}
+      {historyOpen && (
+        <HistoryModal
+          sheets={sheets}
+          currentId={currentId}
+          onLoad={loadSheet}
+          onDelete={handleDeleteSheet}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Summary modal
+// History modal
+// ---------------------------------------------------------------------------
+
+function HistoryModal({
+  sheets,
+  currentId,
+  onLoad,
+  onDelete,
+  onClose,
+}: {
+  sheets: CalcSheet[];
+  currentId: string | null;
+  onLoad: (sheet: CalcSheet) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+          <h2 className="text-lg font-bold">ประวัติการคำนวณ</h2>
+          <button type="button" onClick={onClose} title="ปิด" className="text-2xl text-gray-400 hover:text-gray-700 leading-none">
+            ×
+          </button>
+        </div>
+        <div className="p-3 sm:p-4 max-h-[70vh] overflow-y-auto">
+          {sheets.length === 0 ? (
+            <p className="text-gray-500 text-sm py-6 text-center">ยังไม่มีรายการที่บันทึกไว้</p>
+          ) : (
+            <ul className="space-y-2">
+              {sheets.map((s) => {
+                const sum = s.data.summary;
+                const best = "bestFinalPrice" in sum ? sum.bestFinalPrice : sum.finalPrice;
+                const count = "breakdownCount" in sum ? sum.breakdownCount : 1;
+                return (
+                  <li
+                    key={s.id}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+                      s.id === currentId ? "border-blue-300 bg-blue-50" : "border-gray-200"
+                    }`}
+                  >
+                    <button type="button" onClick={() => onLoad(s)} className="flex-1 text-left">
+                      <div className="font-medium text-sm">{s.title || "(ไม่มีชื่อ)"}</div>
+                      <div className="text-xs text-gray-500">
+                        {fmtDateTime(s.updated_at)}
+                        {" · "}ไซส์รวม {dash(sum?.totalSize ?? null)}
+                        {count > 1 ? ` · ${count} ทางเลือก` : ""}
+                        {best != null ? ` · ราคาดีสุด ${fmtNum(best)} ฿/กก.` : ""}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(s.id)}
+                      title="ลบ"
+                      className="px-2 rounded text-lg text-gray-400 hover:text-red-700 hover:bg-red-50"
+                    >
+                      ×
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Summary modal (active breakdown)
 // ---------------------------------------------------------------------------
 
 function SummaryModal({
+  name,
   rows,
   c,
   growth,
   labelOf,
   onClose,
 }: {
+  name: string;
   rows: Row[];
   c: Computed;
   growth: string;
@@ -569,7 +967,7 @@ function SummaryModal({
     >
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <h2 className="text-lg font-bold">สรุปการคำนวณ</h2>
+          <h2 className="text-lg font-bold">สรุป: {name || "ทางเลือก"}</h2>
           <button type="button" onClick={onClose} title="ปิด" className="text-2xl text-gray-400 hover:text-gray-700 leading-none">
             ×
           </button>
