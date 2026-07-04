@@ -138,18 +138,37 @@ export default async function MonthlyPage({
   );
 
   // buyer comparison (per sell line — who bought the shrimp)
+  // Growth is attributed per size: each sell line takes its share of that
+  // size's diff/buy kg within the lot, so a buyer who took all of เบอร์ 2
+  // sees เบอร์ 2's growth, not the lot-wide blend.
   const buyerMap = new Map<
     string,
-    { lots: Set<string>; sellKg: number; sales: number }
+    {
+      lots: Map<string, { date: string; supplier: string }>;
+      sellKg: number;
+      sales: number;
+      hd: number;
+      hdd: number;
+    }
   >();
   for (const x of monthRows) {
     for (const sl of x.lot.sell_lines) {
       const name = sl.buyer?.trim() || "ไม่ระบุ";
       const cur =
-        buyerMap.get(name) ?? { lots: new Set<string>(), sellKg: 0, sales: 0 };
-      cur.lots.add(x.lot.id);
+        buyerMap.get(name) ??
+        { lots: new Map(), sellKg: 0, sales: 0, hd: 0, hdd: 0 };
+      cur.lots.set(x.lot.id, {
+        date: x.lot.buy_date,
+        supplier: x.lot.suppliers?.name ?? "",
+      });
       cur.sellKg = round2(cur.sellKg + Number(sl.weight_kg));
       cur.sales = round2(cur.sales + sellLineSales(sl));
+      const sizeRow = x.s.sizeRows.find((r) => r.code === sl.size_code);
+      if (sizeRow && sizeRow.sellKg > 0) {
+        const share = Number(sl.weight_kg) / sizeRow.sellKg;
+        cur.hd += share * sizeRow.diffKg;
+        cur.hdd += share * sizeRow.buyKg;
+      }
       buyerMap.set(name, cur);
     }
   }
@@ -159,6 +178,8 @@ export default async function MonthlyPage({
   const buyerTotals = {
     sellKg: round2(buyerRows.reduce((a, [, v]) => a + v.sellKg, 0)),
     sales: round2(buyerRows.reduce((a, [, v]) => a + v.sales, 0)),
+    hd: buyerRows.reduce((a, [, v]) => a + v.hd, 0),
+    hdd: buyerRows.reduce((a, [, v]) => a + v.hdd, 0),
   };
 
   // charts
@@ -494,30 +515,77 @@ export default async function MonthlyPage({
                 <th className={th}>ผู้ซื้อ</th>
                 <th className={th}>ล็อต</th>
                 <th className={th}>น้ำหนัก</th>
+                <th className={th}>% เพิ่ม/ลด</th>
                 <th className={th}>ยอดขาย</th>
               </tr>
             </thead>
             <tbody>
               {buyerRows.length === 0 && (
                 <tr>
-                  <td className={`${td} text-center text-gray-500`} colSpan={4}>
+                  <td className={`${td} text-center text-gray-500`} colSpan={5}>
                     ไม่มีข้อมูล
                   </td>
                 </tr>
               )}
-              {buyerRows.map(([name, v]) => (
-                <tr key={name}>
-                  <td className={td}>{name}</td>
-                  <td className={tdR}>{v.lots.size}</td>
-                  <td className={tdR}>{fmt(v.sellKg)}</td>
-                  <td className={tdR}>{fmt(v.sales)}</td>
-                </tr>
-              ))}
+              {buyerRows.map(([name, v]) => {
+                const pct = v.hdd > 0 ? v.hd / v.hdd : null;
+                return (
+                  <tr key={name}>
+                    <td className={td}>{name}</td>
+                    <td className={tdR}>
+                      <details className="relative">
+                        <summary className="cursor-pointer list-none text-blue-700 hover:underline">
+                          {v.lots.size}
+                        </summary>
+                        <div className="absolute right-0 z-10 mt-1 min-w-max rounded border border-gray-300 bg-white p-2 text-left shadow-md space-y-1">
+                          {[...v.lots.entries()]
+                            .sort((a, b) => a[1].date.localeCompare(b[1].date))
+                            .map(([id, l]) => (
+                              <Link
+                                key={id}
+                                href={`/lots/${id}`}
+                                className="block whitespace-nowrap text-blue-700 hover:underline"
+                              >
+                                {formatBE(l.date)} {l.supplier}
+                              </Link>
+                            ))}
+                        </div>
+                      </details>
+                    </td>
+                    <td className={tdR}>{fmt(v.sellKg)}</td>
+                    <td
+                      className={`${tdR} ${
+                        pct == null
+                          ? ""
+                          : pct >= 0
+                            ? "text-green-700"
+                            : "text-red-700"
+                      }`}
+                    >
+                      {fmtPct(pct)}
+                    </td>
+                    <td className={tdR}>{fmt(v.sales)}</td>
+                  </tr>
+                );
+              })}
               {buyerRows.length > 0 && (
                 <tr className="font-semibold bg-gray-50">
                   <td className={td}>รวม</td>
                   <td className={tdR}></td>
                   <td className={tdR}>{fmt(buyerTotals.sellKg)}</td>
+                  <td
+                    className={`${tdR} ${
+                      buyerTotals.hdd <= 0
+                        ? ""
+                        : buyerTotals.hd / buyerTotals.hdd >= 0
+                          ? "text-green-700"
+                          : "text-red-700"
+                    }`}
+                  >
+                    {fmtPct(
+                      buyerTotals.hdd > 0 ? buyerTotals.hd / buyerTotals.hdd : null
+                    )}
+                  </td>
                   <td className={tdR}>{fmt(buyerTotals.sales)}</td>
                 </tr>
               )}
