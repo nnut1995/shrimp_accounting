@@ -77,7 +77,16 @@ export default async function LotPage({
 
   const s = calcLot(sizeList, buys, sells, adjs, exps);
 
-  const sizeOptions = sizeList.map((sz) => ({ value: sz.code, label: sz.label }));
+  // เบอร์ is free text; these are only suggestions — known sizes plus whatever
+  // codes this lot already uses.
+  const sizeOptions = [
+    ...new Map([
+      ...sizeList.map((sz) => [sz.code, sz.label] as const),
+      ...[...buys, ...sells].map((x) => [x.size_code, x.size_code] as const),
+    ]),
+  ]
+    .filter(([code]) => code)
+    .map(([value, label]) => ({ value, label }));
 
   const headline: [string, string, string?][] = [
     ["น้ำหนัก", fmt(s.buyKg)],
@@ -92,6 +101,13 @@ export default async function LotPage({
 
   return (
     <div className="space-y-8">
+      <datalist id="size-list">
+        {sizeOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </datalist>
       <div className="flex flex-wrap items-start gap-3">
         <div>
           <h1 className="text-xl font-bold">
@@ -256,13 +272,7 @@ export default async function LotPage({
           </label>
           <label className="text-xs text-gray-600">
             เบอร์
-            <select name="size_code" required className={input}>
-              {sizeList.map((sz) => (
-                <option key={sz.code} value={sz.code}>
-                  {sz.label}
-                </option>
-              ))}
-            </select>
+            <input name="size_code" list="size-list" required className={input} />
           </label>
           <label className="text-xs text-gray-600">
             รายการ
@@ -381,13 +391,7 @@ export default async function LotPage({
           </label>
           <label className="text-xs text-gray-600">
             เบอร์
-            <select name="size_code" required className={input}>
-              {sizeList.map((sz) => (
-                <option key={sz.code} value={sz.code}>
-                  {sz.label}
-                </option>
-              ))}
-            </select>
+            <input name="size_code" list="size-list" required className={input} />
           </label>
           <label className="text-xs text-gray-600">
             รายการ

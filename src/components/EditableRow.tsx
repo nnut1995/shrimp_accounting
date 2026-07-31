@@ -8,6 +8,7 @@ export type EditField = {
   value?: string;
   type?: string;
   inputMode?: "decimal";
+  // datalist suggestions; the field stays free text
   options?: { value: string; label: string }[];
   right?: boolean;
 };
@@ -36,24 +37,26 @@ export default function EditableRow({
       {fields.map((f, i) => (
         <td key={i} className={`${td} ${f.right ? "text-right" : ""}`}>
           {editing && f.name ? (
-            f.options ? (
-              <select name={f.name} defaultValue={f.value} form={formId} className={input}>
-                {f.options.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
+            <>
               <input
                 name={f.name}
                 defaultValue={f.value}
                 type={f.type ?? "text"}
                 inputMode={f.inputMode}
+                list={f.options ? `${formId}-${f.name}` : undefined}
                 form={formId}
                 className={input}
               />
-            )
+              {f.options && (
+                <datalist id={`${formId}-${f.name}`}>
+                  {f.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </datalist>
+              )}
+            </>
           ) : (
             f.display
           )}

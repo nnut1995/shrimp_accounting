@@ -64,10 +64,21 @@ export function calcLot(
   adjustments: Adjustment[],
   expenses: Expense[]
 ): LotSummary {
+  // เบอร์ is free text, so a line can carry a code that isn't in the sizes
+  // table. Known sizes keep their sort_order; anything else follows in order of
+  // first appearance, so nothing drops out of the totals.
+  const codes = [
+    ...new Set([
+      ...sizes.map((sz) => sz.code),
+      ...buys.map((x) => x.size_code),
+      ...sells.map((x) => x.size_code),
+    ]),
+  ].filter(Boolean);
+
   const sizeRows: SizeRow[] = [];
-  for (const size of sizes) {
-    const b = buys.filter((x) => x.size_code === size.code);
-    const s = sells.filter((x) => x.size_code === size.code);
+  for (const code of codes) {
+    const b = buys.filter((x) => x.size_code === code);
+    const s = sells.filter((x) => x.size_code === code);
     const buyKg = round2(b.reduce((a, x) => a + Number(x.weight_kg), 0));
     const sellKg = round2(s.reduce((a, x) => a + Number(x.weight_kg), 0));
     if (buyKg === 0 && sellKg === 0) continue;
@@ -79,7 +90,7 @@ export function calcLot(
     );
     const diffKg = round2(sellKg - buyKg);
     sizeRows.push({
-      code: size.code,
+      code,
       buyKg,
       sellKg,
       diffKg,

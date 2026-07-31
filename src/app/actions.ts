@@ -45,6 +45,34 @@ async function findOrCreateByName(
   return data.id;
 }
 
+// เบอร์ is free text, but buy_lines/sell_lines.size_code still references
+// sizes(code). Register any new code so it satisfies the FK and shows up in the
+// suggestion list next time; existing codes keep their label and sort_order.
+async function ensureSize(code: string): Promise<string> {
+  if (!code) throw new Error("กรุณากรอกเบอร์");
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("sizes")
+    .select("code")
+    .eq("code", code)
+    .maybeSingle();
+  if (existing) return code;
+  const { data: last } = await supabase
+    .from("sizes")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase
+    .from("sizes")
+    .upsert(
+      { code, label: code, sort_order: (last?.sort_order ?? 0) + 1 },
+      { onConflict: "code", ignoreDuplicates: true }
+    );
+  if (error) throw new Error(error.message);
+  return code;
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -99,7 +127,7 @@ export async function addBuyLine(formData: FormData) {
   const { error } = await supabase.from("buy_lines").insert({
     lot_id: lotId,
     container: str(formData.get("container")),
-    size_code: str(formData.get("size_code")),
+    size_code: await ensureSize(str(formData.get("size_code"))),
     description: str(formData.get("description")),
     density: str(formData.get("density")),
     weight_kg: num(formData.get("weight_kg")),
@@ -117,7 +145,7 @@ export async function updateBuyLine(formData: FormData) {
     .from("buy_lines")
     .update({
       container: str(formData.get("container")),
-      size_code: str(formData.get("size_code")),
+      size_code: await ensureSize(str(formData.get("size_code"))),
       description: str(formData.get("description")),
       density: str(formData.get("density")),
       weight_kg: num(formData.get("weight_kg")),
@@ -143,7 +171,7 @@ export async function addSellLine(formData: FormData) {
     lot_id: lotId,
     sell_date: str(formData.get("sell_date")),
     container: str(formData.get("container")),
-    size_code: str(formData.get("size_code")),
+    size_code: await ensureSize(str(formData.get("size_code"))),
     description: str(formData.get("description")),
     density: str(formData.get("density")),
     weight_kg: num(formData.get("weight_kg")),
@@ -163,7 +191,7 @@ export async function updateSellLine(formData: FormData) {
     .update({
       sell_date: str(formData.get("sell_date")),
       container: str(formData.get("container")),
-      size_code: str(formData.get("size_code")),
+      size_code: await ensureSize(str(formData.get("size_code"))),
       description: str(formData.get("description")),
       density: str(formData.get("density")),
       weight_kg: num(formData.get("weight_kg")),
