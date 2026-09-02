@@ -22,10 +22,17 @@ const tooltipFormatter = (value: unknown): [string, string] => [
   "กำไร/ขาดทุน",
 ];
 
-export function ProfitPerLotChart({ data }: { data: ChartPoint[] }) {
+export function ProfitPerLotChart({
+  data,
+  minWidth,
+}: {
+  data: ChartPoint[];
+  /** Fixed inner width (px) so many bars stay legible; the parent scrolls. */
+  minWidth?: number;
+}) {
   if (data.length === 0) return null;
-  return (
-    <div className="h-64 w-full">
+  const chart = (
+    <div className="h-64" style={{ width: minWidth ?? "100%", minWidth }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -42,6 +49,7 @@ export function ProfitPerLotChart({ data }: { data: ChartPoint[] }) {
       </ResponsiveContainer>
     </div>
   );
+  return minWidth ? <div className="overflow-x-auto">{chart}</div> : chart;
 }
 
 export function MonthlyTrendChart({ data }: { data: ChartPoint[] }) {

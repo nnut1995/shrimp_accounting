@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { addMonthlyExpense, deleteMonthlyExpense } from "@/app/actions";
 import { calcLot, round2 } from "@/lib/calc";
-import { summarize } from "@/lib/summary";
-import { THAI_MONTHS, beYear, formatBE, monthLabelBE } from "@/lib/dates";
+import { calcTotals, summarize, type LotRow } from "@/lib/summary";
+import { THAI_MONTHS, beYear, formatBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import { MonthlyTrendChart, ProfitPerLotChart } from "@/components/Charts";
-import DeleteButton from "@/components/DeleteButton";
-import {
-  EXPENSE_CATEGORIES,
-  type LotWithChildren,
-  type MonthlyExpense,
-  type Size,
-} from "@/lib/types";
+import type { LotWithChildren, MonthlyExpense, Size } from "@/lib/types";
 
 const LOT_SELECT =
   "*, suppliers(name), buy_lines(*), sell_lines(*), adjustments(*), expenses(*, expense_categories(name))";
@@ -35,20 +28,19 @@ const THAI_MONTHS_SHORT = [
 const th = "border border-gray-300 px-2 py-1.5 bg-gray-100 text-sm whitespace-nowrap";
 const td = "border border-gray-300 px-2 py-1.5 text-sm";
 const tdR = `${td} text-right`;
-const input = "border rounded px-2 py-1.5 text-sm w-full bg-white";
 
-export default async function MonthlyPage({
+/** Read-only yearly summary. No forms, no mutations — links out only. */
+export default async function YearlyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ y?: string; m?: string }>;
+  searchParams: Promise<{ y?: string }>;
 }) {
   const sp = await searchParams;
   const now = new Date();
   const y = parseInt(sp.y ?? "") || now.getFullYear();
-  const m = parseInt(sp.m ?? "") || now.getMonth() + 1;
 
   const supabase = await createClient();
-  const [{ data: lots }, { data: sizes }, { data: monthlyExps }, { data: cats }] =
+  const [{ data: lots }, { data: sizes }, { data: monthlyExps }] =
     await Promise.all([
       supabase
         .from("lots")
@@ -62,36 +54,54 @@ export default async function MonthlyPage({
         .select("*, expense_categories(name)")
         .eq("year", y)
         .order("created_at"),
-      supabase.from("expense_categories").select("name").order("name"),
     ]);
   const yearLots = (lots ?? []) as LotWithChildren[];
   const sizeList = (sizes ?? []) as Size[];
   const yearMonthlyExps = (monthlyExps ?? []) as MonthlyExpense[];
-  const catNames = [
-    ...new Set([...EXPENSE_CATEGORIES, ...(cats ?? []).map((c) => c.name)]),
-  ];
 
-  const yearRows = yearLots.map((l) => ({
+  const yearRows: LotRow[] = yearLots.map((l) => ({
     lot: l,
     s: calcLot(sizeList, l.buy_lines, l.sell_lines, l.adjustments, l.expenses),
   }));
-  const monthRows = yearRows.filter(
-    (x) => Number(x.lot.buy_date.slice(5, 7)) === m
-  );
 
   const { totals, expRows, supRows, buyerRows, buyerTotals } =
-    summarize(monthRows);
-  const totalHeadlinePct = totals.headlinePct;
+    summarize(yearRows);
 
-  // standalone monthly expenses (not tied to a lot)
-  const monthExps = yearMonthlyExps.filter((e) => e.month === m);
+  // standalone monthly expenses across the whole year
   const monthlyExpenseTotal = round2(
-    monthExps.reduce((a, e) => a + Number(e.amount), 0)
+    yearMonthlyExps.reduce((a, e) => a + Number(e.amount), 0)
   );
   const netProfit = round2(totals.profit - monthlyExpenseTotal);
 
+  const monthOf = (iso: string) => Number(iso.slice(5, 7));
+  const monthExpTotal = (m: number) =>
+    round2(
+      yearMonthlyExps
+        .filter((e) => e.month === m)
+        .reduce((a, e) => a + Number(e.amount), 0)
+    );
+
+  // lot table: one <tbody> per month that has lots
+  const monthBlocks = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map((m) => {
+      const rows = yearRows.filter((x) => monthOf(x.lot.buy_date) === m);
+      const mt = calcTotals(rows);
+      const exp = monthExpTotal(m);
+      return { m, rows, t: mt, exp, net: round2(mt.profit - exp) };
+    })
+    .filter((b) => b.rows.length > 0);
+
+  // standalone expenses grouped by month (months that have any)
+  const expenseBlocks = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map((m) => ({
+      m,
+      items: yearMonthlyExps.filter((e) => e.month === m),
+      total: monthExpTotal(m),
+    }))
+    .filter((b) => b.items.length > 0);
+
   // charts
-  const lotChart = monthRows.map((x) => ({
+  const lotChart = yearRows.map((x) => ({
     name: `${formatBE(x.lot.buy_date)} ${x.lot.suppliers?.name ?? ""}`,
     profit: x.s.profit,
   }));
@@ -99,19 +109,16 @@ export default async function MonthlyPage({
     name,
     profit: round2(
       yearRows
-        .filter((x) => Number(x.lot.buy_date.slice(5, 7)) === i + 1)
-        .reduce((a, x) => a + x.s.profit, 0) -
-        yearMonthlyExps
-          .filter((e) => e.month === i + 1)
-          .reduce((a, e) => a + Number(e.amount), 0)
+        .filter((x) => monthOf(x.lot.buy_date) === i + 1)
+        .reduce((a, x) => a + x.s.profit, 0) - monthExpTotal(i + 1)
     ),
   }));
 
   const headline: [string, string, string?][] = [
-    ["จำนวนล็อต", String(monthRows.length)],
+    ["จำนวนล็อต", String(yearRows.length)],
     ["น้ำหนัก", fmt(totals.buyKg)],
     ["น้ำหนัก", fmt(totals.sellKg)],
-    ["% เพิ่ม/ลด", fmtPct(totalHeadlinePct)],
+    ["% เพิ่ม/ลด", fmtPct(totals.headlinePct)],
     ["ยอดขายสุทธิ", fmt(totals.netSales)],
     ["ต้นทุนซื้อ", fmt(totals.costTotal)],
     ["ค่าใช้จ่าย", fmt(totals.expenseTotal)],
@@ -128,19 +135,20 @@ export default async function MonthlyPage({
     ],
   ];
 
+  const pctCls = (p: number | null) =>
+    p == null ? "" : p >= 0 ? "text-green-700" : "text-red-700";
+  const moneyCls = (n: number) => (n >= 0 ? "text-green-700" : "text-red-700");
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">สรุปประจำเดือน {monthLabelBE(y, m)}</h1>
+        <h1 className="text-xl font-bold">สรุปประจำปี {beYear(y)}</h1>
         <form className="no-print ml-auto flex gap-2 items-center" method="get">
-          <select name="m" defaultValue={m} className="border rounded px-2 py-1.5 text-sm bg-white">
-            {THAI_MONTHS.map((name, i) => (
-              <option key={i} value={i + 1}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <select name="y" defaultValue={y} className="border rounded px-2 py-1.5 text-sm bg-white">
+          <select
+            name="y"
+            defaultValue={y}
+            className="border rounded px-2 py-1.5 text-sm bg-white"
+          >
             {Array.from({ length: 5 }, (_, i) => now.getFullYear() + 1 - i).map(
               (yy) => (
                 <option key={yy} value={yy}>
@@ -155,19 +163,22 @@ export default async function MonthlyPage({
         </form>
       </div>
 
-      {/* month totals */}
+      {/* year totals */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {headline.map(([label, value, cls], i) => (
-          <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <div
+            key={i}
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"
+          >
             <div className="text-xs text-gray-500">{label}</div>
             <div className={`text-lg font-semibold ${cls ?? ""}`}>{value}</div>
           </div>
         ))}
       </div>
 
-      {/* lot table */}
+      {/* lot table, grouped by month */}
       <section>
-        <h2 className="font-bold mb-2">ล็อตในเดือนนี้</h2>
+        <h2 className="font-bold mb-2">ล็อตในปีนี้</h2>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse bg-white">
             <thead>
@@ -183,86 +194,120 @@ export default async function MonthlyPage({
                 <th className={th}>กำไร/ขาดทุน</th>
               </tr>
             </thead>
-            <tbody>
-              {monthRows.length === 0 && (
+            {monthBlocks.length === 0 && (
+              <tbody>
                 <tr>
                   <td className={`${td} text-center text-gray-500`} colSpan={9}>
-                    ไม่มีล็อตในเดือนนี้
+                    ไม่มีล็อตในปีนี้
                   </td>
                 </tr>
-              )}
-              {monthRows.map(({ lot, s }) => (
-                <tr key={lot.id} className="hover:bg-blue-50">
-                  <td className={td}>
+              </tbody>
+            )}
+            {monthBlocks.map((b) => (
+              <tbody key={b.m}>
+                <tr className="bg-gray-100">
+                  <td className={`${td} font-bold`} colSpan={9}>
                     <Link
-                      href={`/lots/${lot.id}`}
+                      href={`/monthly?y=${y}&m=${b.m}`}
                       className="text-blue-700 hover:underline"
                     >
-                      {formatBE(lot.buy_date)}
+                      {THAI_MONTHS[b.m - 1]} {beYear(y)}
                     </Link>
                   </td>
-                  <td className={td}>{lot.suppliers?.name}</td>
-                  <td className={tdR}>{fmt(s.buyKg)}</td>
-                  <td className={tdR}>{fmt(s.sellKg)}</td>
-                  <td
-                    className={`${tdR} ${
-                      s.headlinePct == null
-                        ? ""
-                        : s.headlinePct >= 0
-                          ? "text-green-700"
-                          : "text-red-700"
-                    }`}
-                  >
-                    {fmtPct(s.headlinePct)}
-                  </td>
-                  <td className={tdR}>{fmt(s.netSales)}</td>
-                  <td className={tdR}>{fmt(s.costTotal)}</td>
-                  <td className={tdR}>{fmt(s.expenseTotal)}</td>
-                  <td
-                    className={`${tdR} font-medium ${
-                      s.profit >= 0 ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
-                    {fmt(s.profit)}
-                  </td>
                 </tr>
-              ))}
-              {monthRows.length > 0 && (
+                {b.rows.map(({ lot, s }) => (
+                  <tr key={lot.id} className="hover:bg-blue-50">
+                    <td className={td}>
+                      <Link
+                        href={`/lots/${lot.id}`}
+                        className="text-blue-700 hover:underline"
+                      >
+                        {formatBE(lot.buy_date)}
+                      </Link>
+                    </td>
+                    <td className={td}>{lot.suppliers?.name}</td>
+                    <td className={tdR}>{fmt(s.buyKg)}</td>
+                    <td className={tdR}>{fmt(s.sellKg)}</td>
+                    <td className={`${tdR} ${pctCls(s.headlinePct)}`}>
+                      {fmtPct(s.headlinePct)}
+                    </td>
+                    <td className={tdR}>{fmt(s.netSales)}</td>
+                    <td className={tdR}>{fmt(s.costTotal)}</td>
+                    <td className={tdR}>{fmt(s.expenseTotal)}</td>
+                    <td className={`${tdR} font-medium ${moneyCls(s.profit)}`}>
+                      {fmt(s.profit)}
+                    </td>
+                  </tr>
+                ))}
                 <tr className="font-semibold bg-gray-50">
                   <td className={td} colSpan={2}>
-                    รวม
+                    รวม {THAI_MONTHS[b.m - 1]}
+                  </td>
+                  <td className={tdR}>{fmt(b.t.buyKg)}</td>
+                  <td className={tdR}>{fmt(b.t.sellKg)}</td>
+                  <td className={`${tdR} ${pctCls(b.t.headlinePct)}`}>
+                    {fmtPct(b.t.headlinePct)}
+                  </td>
+                  <td className={tdR}>{fmt(b.t.netSales)}</td>
+                  <td className={tdR}>{fmt(b.t.costTotal)}</td>
+                  <td className={tdR}>{fmt(b.t.expenseTotal)}</td>
+                  <td className={`${tdR} ${moneyCls(b.t.profit)}`}>
+                    {fmt(b.t.profit)}
+                  </td>
+                </tr>
+                <tr className="bg-gray-50">
+                  <td className={td} colSpan={8}>
+                    ค่าใช้จ่ายประจำเดือน
+                  </td>
+                  <td className={tdR}>{fmt(b.exp)}</td>
+                </tr>
+                <tr className="font-semibold bg-gray-50">
+                  <td className={td} colSpan={8}>
+                    กำไรสุทธิ {THAI_MONTHS[b.m - 1]}
+                  </td>
+                  <td className={`${tdR} ${moneyCls(b.net)}`}>{fmt(b.net)}</td>
+                </tr>
+              </tbody>
+            ))}
+            {monthBlocks.length > 0 && (
+              <tbody>
+                <tr className="font-bold bg-gray-200">
+                  <td className={td} colSpan={2}>
+                    รวมทั้งปี
                   </td>
                   <td className={tdR}>{fmt(totals.buyKg)}</td>
                   <td className={tdR}>{fmt(totals.sellKg)}</td>
-                  <td
-                    className={`${tdR} ${
-                      totalHeadlinePct == null
-                        ? ""
-                        : totalHeadlinePct >= 0
-                          ? "text-green-700"
-                          : "text-red-700"
-                    }`}
-                  >
-                    {fmtPct(totalHeadlinePct)}
+                  <td className={`${tdR} ${pctCls(totals.headlinePct)}`}>
+                    {fmtPct(totals.headlinePct)}
                   </td>
                   <td className={tdR}>{fmt(totals.netSales)}</td>
                   <td className={tdR}>{fmt(totals.costTotal)}</td>
                   <td className={tdR}>{fmt(totals.expenseTotal)}</td>
-                  <td
-                    className={`${tdR} ${
-                      totals.profit >= 0 ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
+                  <td className={`${tdR} ${moneyCls(totals.profit)}`}>
                     {fmt(totals.profit)}
                   </td>
                 </tr>
-              )}
-            </tbody>
+                <tr className="bg-gray-200">
+                  <td className={td} colSpan={8}>
+                    ค่าใช้จ่ายประจำเดือน (รวมทั้งปี)
+                  </td>
+                  <td className={tdR}>{fmt(monthlyExpenseTotal)}</td>
+                </tr>
+                <tr className="font-bold bg-gray-200">
+                  <td className={td} colSpan={8}>
+                    กำไรสุทธิทั้งปี
+                  </td>
+                  <td className={`${tdR} ${moneyCls(netProfit)}`}>
+                    {fmt(netProfit)}
+                  </td>
+                </tr>
+              </tbody>
+            )}
           </table>
         </div>
       </section>
 
-      {/* standalone monthly expenses */}
+      {/* standalone monthly expenses, grouped by month (read-only) */}
       <section>
         <h2 className="font-bold mb-2">
           ค่าใช้จ่ายประจำเดือน (ไม่ผูกกับล็อต)
@@ -274,65 +319,49 @@ export default async function MonthlyPage({
                 <th className={th}>รายการ</th>
                 <th className={th}>จำนวนเงิน</th>
                 <th className={th}>หมายเหตุ</th>
-                <th className={`${th} no-print`}></th>
               </tr>
             </thead>
-            <tbody>
-              {monthExps.length === 0 && (
+            {expenseBlocks.length === 0 && (
+              <tbody>
                 <tr>
-                  <td className={`${td} text-center text-gray-500`} colSpan={4}>
+                  <td className={`${td} text-center text-gray-500`} colSpan={3}>
                     ไม่มีค่าใช้จ่ายประจำเดือน
                   </td>
                 </tr>
-              )}
-              {monthExps.map((e) => (
-                <tr key={e.id}>
-                  <td className={td}>{e.expense_categories?.name}</td>
-                  <td className={tdR}>{fmt(Number(e.amount))}</td>
-                  <td className={td}>{e.note}</td>
-                  <td className={`${td} no-print text-center`}>
-                    <DeleteButton action={deleteMonthlyExpense.bind(null, e.id)} />
+              </tbody>
+            )}
+            {expenseBlocks.map((b) => (
+              <tbody key={b.m}>
+                <tr className="bg-gray-100">
+                  <td className={`${td} font-bold`} colSpan={3}>
+                    {THAI_MONTHS[b.m - 1]} {beYear(y)}
                   </td>
                 </tr>
-              ))}
-              {monthExps.length > 0 && (
+                {b.items.map((e) => (
+                  <tr key={e.id}>
+                    <td className={td}>{e.expense_categories?.name}</td>
+                    <td className={tdR}>{fmt(Number(e.amount))}</td>
+                    <td className={td}>{e.note}</td>
+                  </tr>
+                ))}
                 <tr className="font-semibold bg-gray-50">
-                  <td className={td}>รวม</td>
+                  <td className={td}>รวม {THAI_MONTHS[b.m - 1]}</td>
+                  <td className={tdR}>{fmt(b.total)}</td>
+                  <td className={td}></td>
+                </tr>
+              </tbody>
+            ))}
+            {expenseBlocks.length > 0 && (
+              <tbody>
+                <tr className="font-bold bg-gray-200">
+                  <td className={td}>รวมทั้งปี</td>
                   <td className={tdR}>{fmt(monthlyExpenseTotal)}</td>
                   <td className={td}></td>
-                  <td className={`${td} no-print`}></td>
                 </tr>
-              )}
-            </tbody>
+              </tbody>
+            )}
           </table>
         </div>
-        <form
-          action={addMonthlyExpense}
-          className="no-print mt-2 flex flex-wrap gap-2 items-end bg-white border border-gray-200 rounded-lg p-3"
-        >
-          <input type="hidden" name="year" value={y} />
-          <input type="hidden" name="month" value={m} />
-          <label className="text-xs text-gray-600">
-            รายการ
-            <input name="category" required list="monthly-category-list" className={input} />
-            <datalist id="monthly-category-list">
-              {catNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </label>
-          <label className="text-xs text-gray-600">
-            จำนวนเงิน
-            <input name="amount" required inputMode="decimal" className={input} />
-          </label>
-          <label className="text-xs text-gray-600 flex-1 min-w-40">
-            หมายเหตุ
-            <input name="note" placeholder="เช่น ค่าเช่า, เงินเดือน" className={input} />
-          </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
-            + เพิ่มค่าใช้จ่าย
-          </button>
-        </form>
       </section>
 
       <div className="grid lg:grid-cols-2 gap-8">
@@ -399,11 +428,7 @@ export default async function MonthlyPage({
                   <td className={tdR}>
                     {fmtPct(v.hdd > 0 ? v.hd / v.hdd : null)}
                   </td>
-                  <td
-                    className={`${tdR} font-medium ${
-                      v.profit >= 0 ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
+                  <td className={`${tdR} font-medium ${moneyCls(v.profit)}`}>
                     {fmt(v.profit)}
                   </td>
                 </tr>
@@ -445,7 +470,7 @@ export default async function MonthlyPage({
                         <summary className="cursor-pointer list-none text-blue-700 hover:underline">
                           {v.lots.size}
                         </summary>
-                        <div className="absolute right-0 z-10 mt-1 min-w-max rounded border border-gray-300 bg-white p-2 text-left shadow-md space-y-1">
+                        <div className="absolute right-0 z-10 mt-1 max-h-64 min-w-max overflow-y-auto rounded border border-gray-300 bg-white p-2 text-left shadow-md space-y-1">
                           {[...v.lots.entries()]
                             .sort((a, b) => a[1].date.localeCompare(b[1].date))
                             .map(([id, l]) => (
@@ -461,17 +486,7 @@ export default async function MonthlyPage({
                       </details>
                     </td>
                     <td className={tdR}>{fmt(v.sellKg)}</td>
-                    <td
-                      className={`${tdR} ${
-                        pct == null
-                          ? ""
-                          : pct >= 0
-                            ? "text-green-700"
-                            : "text-red-700"
-                      }`}
-                    >
-                      {fmtPct(pct)}
-                    </td>
+                    <td className={`${tdR} ${pctCls(pct)}`}>{fmtPct(pct)}</td>
                     <td className={tdR}>{fmt(v.sales)}</td>
                   </tr>
                 );
@@ -482,13 +497,9 @@ export default async function MonthlyPage({
                   <td className={tdR}></td>
                   <td className={tdR}>{fmt(buyerTotals.sellKg)}</td>
                   <td
-                    className={`${tdR} ${
-                      buyerTotals.hdd <= 0
-                        ? ""
-                        : buyerTotals.hd / buyerTotals.hdd >= 0
-                          ? "text-green-700"
-                          : "text-red-700"
-                    }`}
+                    className={`${tdR} ${pctCls(
+                      buyerTotals.hdd > 0 ? buyerTotals.hd / buyerTotals.hdd : null
+                    )}`}
                   >
                     {fmtPct(
                       buyerTotals.hdd > 0 ? buyerTotals.hd / buyerTotals.hdd : null
@@ -504,10 +515,15 @@ export default async function MonthlyPage({
 
       {/* charts */}
       <section className="no-print">
-        <h2 className="font-bold mb-2">กำไร/ขาดทุน รายล็อต ({monthLabelBE(y, m)})</h2>
+        <h2 className="font-bold mb-2">
+          กำไร/ขาดทุน รายล็อต (ปี {beYear(y)})
+        </h2>
         {lotChart.length > 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-3">
-            <ProfitPerLotChart data={lotChart} />
+            <ProfitPerLotChart
+              data={lotChart}
+              minWidth={Math.max(600, lotChart.length * 28)}
+            />
           </div>
         ) : (
           <p className="text-gray-500 text-sm">ไม่มีข้อมูล</p>

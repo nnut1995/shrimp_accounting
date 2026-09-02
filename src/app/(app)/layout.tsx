@@ -27,6 +27,9 @@ export default async function AppLayout({
           <Link href="/monthly" className="text-blue-700 hover:underline">
             สรุปรายเดือน
           </Link>
+          <Link href="/yearly" className="text-blue-700 hover:underline">
+            สรุปรายปี
+          </Link>
           <Link href="/calculator" className="text-blue-700 hover:underline">
             คำนวณไซส์
           </Link>
