@@ -103,10 +103,17 @@ export async function updateLot(formData: FormData) {
   const supabase = await createClient();
   const lotId = str(formData.get("lot_id"));
   const buyDate = str(formData.get("buy_date"));
-  if (!buyDate) throw new Error("กรุณากรอกวันที่ซื้อ");
+  const supplierName = str(formData.get("supplier"));
+  if (!buyDate || !supplierName)
+    throw new Error("กรุณากรอกวันที่ซื้อและผู้ขาย");
+  const supplierId = await findOrCreateByName("suppliers", supplierName);
   const { error } = await supabase
     .from("lots")
-    .update({ buy_date: buyDate, note: str(formData.get("note")) })
+    .update({
+      buy_date: buyDate,
+      supplier_id: supplierId,
+      note: str(formData.get("note")),
+    })
     .eq("id", lotId);
   if (error) throw new Error(error.message);
   revalidatePath("/");

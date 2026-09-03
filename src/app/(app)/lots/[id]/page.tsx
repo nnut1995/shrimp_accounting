@@ -42,13 +42,19 @@ export default async function LotPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: lot }, { data: sizes }, { data: cats }, { data: buyerRows }] =
-    await Promise.all([
-      supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
-      supabase.from("sizes").select("*").order("sort_order"),
-      supabase.from("expense_categories").select("name").order("name"),
-      supabase.from("sell_lines").select("buyer"),
-    ]);
+  const [
+    { data: lot },
+    { data: sizes },
+    { data: cats },
+    { data: buyerRows },
+    { data: supplierRows },
+  ] = await Promise.all([
+    supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
+    supabase.from("sizes").select("*").order("sort_order"),
+    supabase.from("expense_categories").select("name").order("name"),
+    supabase.from("sell_lines").select("buyer"),
+    supabase.from("suppliers").select("name").order("name"),
+  ]);
   if (!lot) notFound();
   const l = lot as LotWithChildren;
   const sizeList = (sizes ?? []) as Size[];
@@ -65,6 +71,9 @@ export default async function LotPage({
         .filter(Boolean)
     ),
   ].sort();
+  const supplierNames = ((supplierRows ?? []) as { name: string }[]).map(
+    (r) => r.name
+  );
 
   const byCreated = (a: { created_at: string }, b: { created_at: string }) =>
     a.created_at.localeCompare(b.created_at);
@@ -122,6 +131,19 @@ export default async function LotPage({
               defaultValue={l.buy_date}
               className={`${input} w-40`}
             />
+            <input
+              name="supplier"
+              required
+              list="supplier-list"
+              defaultValue={l.suppliers?.name ?? ""}
+              placeholder="ผู้ขาย (เจ้า)"
+              className={`${input} w-40`}
+            />
+            <datalist id="supplier-list">
+              {supplierNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
             <input
               name="note"
               defaultValue={l.note}
