@@ -75,6 +75,61 @@ export function expenseBreakdown(rows: LotRow[]): [string, number][] {
   return Array.from(expMap.entries()).sort((a, b) => b[1] - a[1]);
 }
 
+export type ExpenseMatrixRow = {
+  lotId: string;
+  date: string;
+  supplier: string;
+  /** category name -> baht on this lot; a missing key means no line at all */
+  amounts: Record<string, number>;
+  total: number;
+};
+
+export type ExpenseMatrix = {
+  columns: string[];
+  rows: ExpenseMatrixRow[];
+  /** column sums, keyed like a row's amounts */
+  totals: Record<string, number>;
+  grandTotal: number;
+};
+
+/**
+ * Lot expenses pivoted: one row per lot, one column per category that appears
+ * this period, biggest first. The auto per-line ค่าธรรมเนียม is folded into
+ * that category exactly as expenseBreakdown does, so both tables agree. Every
+ * lot gets a row — an all-blank one usually means expenses were never entered.
+ */
+export function expenseMatrix(rows: LotRow[]): ExpenseMatrix {
+  const colTotals = new Map<string, number>();
+  const matrixRows: ExpenseMatrixRow[] = rows.map((x) => {
+    const amounts: Record<string, number> = {};
+    const add = (name: string, amount: number) => {
+      amounts[name] = round2((amounts[name] ?? 0) + amount);
+      colTotals.set(name, round2((colTotals.get(name) ?? 0) + amount));
+    };
+    for (const e of x.lot.expenses) {
+      add(e.expense_categories?.name ?? "อื่นๆ", Number(e.amount));
+    }
+    if (x.s.feeTotal > 0) add("ค่าธรรมเนียม", x.s.feeTotal);
+    return {
+      lotId: x.lot.id,
+      date: x.lot.buy_date,
+      supplier: x.lot.suppliers?.name ?? "",
+      amounts,
+      // the lot table's ค่าใช้จ่าย column, so a row ties back to it exactly
+      total: x.s.expenseTotal,
+    };
+  });
+  const columns = Array.from(colTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+  return {
+    columns,
+    rows: matrixRows,
+    totals: Object.fromEntries(colTotals),
+    grandTotal: round2(matrixRows.reduce((a, r) => a + r.total, 0)),
+  };
+}
+
 export function supplierComparison(rows: LotRow[]): [string, SupplierAgg][] {
   const supMap = new Map<string, SupplierAgg>();
   for (const x of rows) {
@@ -148,6 +203,7 @@ export function summarize(rows: LotRow[]) {
   return {
     totals: calcTotals(rows),
     expRows: expenseBreakdown(rows),
+    expMatrix: expenseMatrix(rows),
     supRows: supplierComparison(rows),
     buyerRows: buyers.rows,
     buyerTotals: buyers.totals,

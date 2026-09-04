@@ -7,6 +7,7 @@ import { THAI_MONTHS, beYear, formatBE, monthLabelBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import { MonthlyTrendChart, ProfitPerLotChart } from "@/components/Charts";
 import DeleteButton from "@/components/DeleteButton";
+import ExpenseMatrixTable from "@/components/ExpenseMatrix";
 import {
   EXPENSE_CATEGORIES,
   type LotWithChildren,
@@ -79,7 +80,7 @@ export default async function MonthlyPage({
     (x) => Number(x.lot.buy_date.slice(5, 7)) === m
   );
 
-  const { totals, expRows, supRows, buyerRows, buyerTotals } =
+  const { totals, expRows, expMatrix, supRows, buyerRows, buyerTotals } =
     summarize(monthRows);
   const totalHeadlinePct = totals.headlinePct;
 
@@ -260,6 +261,18 @@ export default async function MonthlyPage({
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* per-lot expense matrix */}
+      <section>
+        <h2 className="font-bold mb-2">ค่าใช้จ่ายแยกตามล็อต</h2>
+        <ExpenseMatrixTable
+          key={`${y}-${m}`}
+          columns={expMatrix.columns}
+          rows={expMatrix.rows}
+          totals={expMatrix.totals}
+          grandTotal={expMatrix.grandTotal}
+        />
       </section>
 
       {/* standalone monthly expenses */}
