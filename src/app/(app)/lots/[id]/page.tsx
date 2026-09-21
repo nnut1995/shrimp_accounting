@@ -35,6 +35,10 @@ function pctClass(p: number | null) {
   return p >= 0 ? "text-green-700" : "text-red-700";
 }
 
+function fmtAveragePrice(amount: number, weightKg: number) {
+  return weightKg > 0 ? fmt(amount / weightKg) : "—";
+}
+
 export default async function LotPage({
   params,
 }: {
@@ -189,8 +193,10 @@ export default async function LotPage({
             <thead>
               <tr>
                 <th className={th}>รายการ</th>
-                <th className={th}>น้ำหนัก</th>
-                <th className={th}>น้ำหนัก</th>
+                <th className={th}>น้ำหนักซื้อ</th>
+                <th className={th}>ราคาซื้อเฉลี่ย (บาท/กก.)</th>
+                <th className={th}>น้ำหนักขาย</th>
+                <th className={th}>ราคาขายเฉลี่ย (บาท/กก.)</th>
                 <th className={th}>น้ำหนักเพิ่ม/ลด กก.</th>
                 <th className={th}>% เพิ่ม/ลด</th>
                 <th className={th}>ต้นทุนซื้อ</th>
@@ -203,7 +209,9 @@ export default async function LotPage({
                 <tr key={r.code}>
                   <td className={td}>{r.code}</td>
                   <td className={tdR}>{fmt(r.buyKg)}</td>
+                  <td className={tdR}>{fmtAveragePrice(r.cost, r.buyKg)}</td>
                   <td className={tdR}>{fmt(r.sellKg)}</td>
+                  <td className={tdR}>{fmtAveragePrice(r.sales, r.sellKg)}</td>
                   <td className={tdR}>{fmt(r.diffKg)}</td>
                   <td className={`${tdR} ${pctClass(r.pct)}`}>{fmtPct(r.pct)}</td>
                   <td className={tdR}>{fmt(r.cost)}</td>
@@ -216,7 +224,9 @@ export default async function LotPage({
               <tr>
                 <td className={td}>ปรับยอด/ไม่ระบุเบอร์</td>
                 <td className={tdR}></td>
+                <td className={tdR}>—</td>
                 <td className={tdR}></td>
+                <td className={tdR}>—</td>
                 <td className={tdR}></td>
                 <td className={tdR}></td>
                 <td className={tdR}>{fmt(s.costAdjustment)}</td>
@@ -226,7 +236,9 @@ export default async function LotPage({
               <tr className="font-semibold bg-gray-50">
                 <td className={td}>รวม</td>
                 <td className={tdR}>{fmt(s.total.buyKg)}</td>
+                <td className={tdR}>{fmtAveragePrice(s.total.cost, s.total.buyKg)}</td>
                 <td className={tdR}>{fmt(s.total.sellKg)}</td>
+                <td className={tdR}>{fmtAveragePrice(s.total.sales, s.total.sellKg)}</td>
                 <td className={tdR}>{fmt(s.total.diffKg)}</td>
                 <td className={`${tdR} ${pctClass(s.total.pct)}`}>
                   {fmtPct(s.total.pct)}
