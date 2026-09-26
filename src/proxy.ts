@@ -6,7 +6,8 @@ const PUBLIC_PATHS = ["/calculator"];
 
 export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  if (PUBLIC_PATHS.includes(pathname)) {
+  // API routes authenticate Bearer tokens and return JSON errors themselves.
+  if (pathname.startsWith("/api/v1/") || PUBLIC_PATHS.includes(pathname)) {
     return NextResponse.next({ request });
   }
 

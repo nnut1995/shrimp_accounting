@@ -90,3 +90,7 @@ All money math in the DB uses exact decimal types (no floating point).
 ## Out of Scope (agreed)
 - No historical import — start fresh; Google Sheets kept as read-only archive.
 - No roles/permissions, no lot status workflow, no Excel/CSV export (for now).
+
+## AI Accounting API (2026-09-25)
+
+AI can preview, create and read complete accounting lots over authenticated JSON HTTP without interacting with the UI. See [Accounting API v1](docs/accounting-api.md) for the contract, authentication, validation, fee mapping, idempotency and deployment migration. Existing shared-ledger access and UI calculation rules apply. v1 does not edit/delete existing lots or write monthly expenses/calculator sheets.

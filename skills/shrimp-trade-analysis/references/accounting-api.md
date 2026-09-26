@@ -1,0 +1,14 @@
+# Record transactions through the Accounting API
+
+Project: `/Users/natn/Desktop/shrimp_accounting`. Read its `docs/accounting-api.md` for the current contract before calling endpoints. The analysis calculator JSON is **not** the API request shape.
+
+1. Establish the intended app base URL and an authorized Supabase user access token from available configuration/secrets. Never guess a production URL or print credentials. If unavailable, prepare validated JSON and report the missing configuration; do not fall back to UI entry automatically.
+2. Transcribe and resolve material ambiguities using the existing analysis workflow. Convert Buddhist dates to CE ISO dates. Preserve container identifiers as strings. Map buy_rows to buy_lines (`kg` → `weight_kg`, `buy_price` → `cost_per_kg`), sell_rows to sell_lines (`kg` → `weight_kg`, `price` → `price_per_kg`). Supplier and each sale date must be known.
+3. The API groups by size_code and has no match_size field. Use the intended comparison group only when the match is supported; preserve the original label and matching evidence in buy note or sell description. Map soft to the app's `นิ่ม/A`. Do not silently infer prices or assign zero cost to included soft shrimp. Do not copy buy_costs in addition to already represented buy_lines.
+4. Map expenses to category/amount/note. Map signed sale changes to adjustments kind=sales, and cost balancing to kind=cost. The app defaults to 1.2% sale fees per row: prevent double deductions when the source already includes fees. Choose explicit fee_amount, or fee_pct:0 plus the documented aggregate fee expense/adjustment. Do not invent a fee allocation.
+5. GET lots by buy-date range, inspect matching supplier/container/source notes for existing entries. If the task requires editing an existing lot, v1 cannot do that: report the limitation instead of creating a duplicate.
+6. POST `/api/v1/lots/preview`; reconcile returned normalized values, weights, expenses and profit with the source. Resolve discrepancies before a write. No extra confirmation is necessary for an already authorized, unambiguous entry.
+7. Assign and retain one Idempotency-Key per source lot. POST `/api/v1/lots` with the exact preview payload. For a timeout/uncertain result, retry the SAME key and payload under the SAME user; at most two automatic retries, then report uncertainty with the key. Never change a key to bypass 409.
+8. GET the returned lot ID to verify saved rows and totals. Report the lot link, profit, and any remaining source notes. Never claim saved based only on preview. If migration_required occurs, report the migration path and prepared payload; do not claim the database was updated.
+
+Use environment variables `ACCOUNTING_BASE_URL` and `ACCOUNTING_ACCESS_TOKEN` when provided. Do not save credentials in payloads, skill files, project docs, or command output. The API shares the same trusted-user ledger as the web UI.
