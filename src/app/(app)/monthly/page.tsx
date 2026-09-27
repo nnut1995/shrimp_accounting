@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { addMonthlyExpense, deleteMonthlyExpense } from "@/app/actions";
+import { addMonthlyExpense, deleteMonthlyExpense, updateMonthlyExpense } from "@/app/actions";
 import { calcLot, round2 } from "@/lib/calc";
 import { summarize } from "@/lib/summary";
 import { THAI_MONTHS, beYear, formatBE, monthLabelBE } from "@/lib/dates";
 import { fmt, fmtPct } from "@/lib/format";
 import { MonthlyTrendChart, ProfitPerLotChart } from "@/components/Charts";
 import DeleteButton from "@/components/DeleteButton";
+import EditableRow from "@/components/EditableRow";
 import ExpenseMatrixTable from "@/components/ExpenseMatrix";
 import {
   EXPENSE_CATEGORIES,
@@ -299,14 +300,18 @@ export default async function MonthlyPage({
                 </tr>
               )}
               {monthExps.map((e) => (
-                <tr key={e.id}>
-                  <td className={td}>{e.expense_categories?.name}</td>
-                  <td className={tdR}>{fmt(Number(e.amount))}</td>
-                  <td className={td}>{e.note}</td>
-                  <td className={`${td} no-print text-center`}>
-                    <DeleteButton action={deleteMonthlyExpense.bind(null, e.id)} />
-                  </td>
-                </tr>
+                <EditableRow
+                  key={e.id}
+                  formId={`monthly-expense-${e.id}`}
+                  action={updateMonthlyExpense}
+                  hidden={{ id: e.id }}
+                  deleteSlot={<DeleteButton action={deleteMonthlyExpense.bind(null, e.id)} />}
+                  fields={[
+                    { name: "category", value: e.expense_categories?.name ?? "", display: e.expense_categories?.name, options: catNames.map((name) => ({ value: name, label: name })), required: true, label: "รายการ" },
+                    { name: "amount", value: String(e.amount), display: fmt(Number(e.amount)), right: true, inputMode: "decimal", required: true, label: "จำนวนเงิน" },
+                    { name: "note", value: e.note, display: e.note, label: "หมายเหตุ" },
+                  ]}
+                />
               ))}
               {monthExps.length > 0 && (
                 <tr className="font-semibold bg-gray-50">

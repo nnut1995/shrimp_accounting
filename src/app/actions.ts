@@ -255,6 +255,49 @@ export async function deleteExpense(id: string, lotId: string) {
   revalidatePath(`/lots/${lotId}`);
 }
 
+export async function updateExpense(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("กรุณาเข้าสู่ระบบ");
+  const id = str(formData.get("id"));
+  const lotId = str(formData.get("lot_id"));
+  if (!id || !lotId) throw new Error("ไม่พบรายการค่าใช้จ่าย");
+  const values = await expenseEditValues(formData);
+  const { error } = await supabase.from("expenses")
+    .update(values).eq("id", id).eq("lot_id", lotId).select("id").single();
+  if (error) throw new Error(error.message);
+  revalidatePath(`/lots/${lotId}`);
+  revalidatePath("/");
+  revalidatePath("/monthly");
+  revalidatePath("/yearly");
+}
+
+async function expenseEditValues(formData: FormData) {
+  const categoryName = str(formData.get("category"));
+  if (!categoryName) throw new Error("กรุณาระบุรายการค่าใช้จ่าย");
+  const rawAmount = str(formData.get("amount")).replace(/,/g, "");
+  const amount = Number(rawAmount);
+  if (!rawAmount || !Number.isFinite(amount) || amount < 0) {
+    throw new Error("กรุณาระบุจำนวนเงินเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
+  }
+  const categoryId = await findOrCreateByName("expense_categories", categoryName);
+  return { category_id: categoryId, amount, note: str(formData.get("note")) };
+}
+
+export async function updateMonthlyExpense(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("กรุณาเข้าสู่ระบบ");
+  const id = str(formData.get("id"));
+  if (!id) throw new Error("ไม่พบรายการค่าใช้จ่าย");
+  const values = await expenseEditValues(formData);
+  const { error } = await supabase.from("monthly_expenses")
+    .update(values).eq("id", id).select("id").single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/monthly");
+  revalidatePath("/yearly");
+}
+
 export async function addMonthlyExpense(formData: FormData) {
   const supabase = await createClient();
   const year = num(formData.get("year"));

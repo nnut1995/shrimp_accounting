@@ -8,6 +8,8 @@ export type EditField = {
   value?: string;
   type?: string;
   inputMode?: "decimal";
+  required?: boolean;
+  label?: string;
   // datalist suggestions; the field stays free text
   options?: { value: string; label: string }[];
   right?: boolean;
@@ -31,6 +33,7 @@ export default function EditableRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <tr className={editing ? "bg-blue-50" : undefined}>
@@ -43,6 +46,9 @@ export default function EditableRow({
                 defaultValue={f.value}
                 type={f.type ?? "text"}
                 inputMode={f.inputMode}
+                required={f.required}
+                aria-label={f.label ?? f.name}
+                readOnly={saving}
                 list={f.options ? `${formId}-${f.name}` : undefined}
                 form={formId}
                 className={input}
@@ -68,9 +74,12 @@ export default function EditableRow({
             id={formId}
             action={async (formData) => {
               setSaving(true);
+              setError(null);
               try {
                 await action(formData);
                 setEditing(false);
+              } catch (error) {
+                setError(error instanceof Error ? error.message : "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง");
               } finally {
                 setSaving(false);
               }
@@ -89,7 +98,7 @@ export default function EditableRow({
             </button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={() => { setEditing(false); setError(null); }}
               disabled={saving}
               className="text-gray-500 hover:underline text-sm"
             >
@@ -108,6 +117,7 @@ export default function EditableRow({
             {deleteSlot}
           </span>
         )}
+        {error && <p role="alert" className="mt-1 whitespace-normal text-sm text-red-600">{error}</p>}
       </td>
     </tr>
   );

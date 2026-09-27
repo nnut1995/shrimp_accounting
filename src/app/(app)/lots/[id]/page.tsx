@@ -15,6 +15,7 @@ import {
   deleteLot,
   deleteSellLine,
   updateBuyLine,
+  updateExpense,
   updateLot,
   updateSellLine,
 } from "@/app/actions";
@@ -525,14 +526,18 @@ export default async function LotPage({
             </thead>
             <tbody>
               {exps.map((e) => (
-                <tr key={e.id}>
-                  <td className={td}>{e.expense_categories?.name}</td>
-                  <td className={tdR}>{fmt(Number(e.amount))}</td>
-                  <td className={td}>{e.note}</td>
-                  <td className={`${td} no-print text-center`}>
-                    <DeleteButton action={deleteExpense.bind(null, e.id, l.id)} />
-                  </td>
-                </tr>
+                <EditableRow
+                  key={e.id}
+                  formId={`expense-${e.id}`}
+                  action={updateExpense}
+                  hidden={{ id: e.id, lot_id: l.id }}
+                  deleteSlot={<DeleteButton action={deleteExpense.bind(null, e.id, l.id)} />}
+                  fields={[
+                    { name: "category", value: e.expense_categories?.name ?? "", display: e.expense_categories?.name, options: catNames.map((name) => ({ value: name, label: name })), required: true, label: "รายการ" },
+                    { name: "amount", value: String(e.amount), display: fmt(Number(e.amount)), right: true, inputMode: "decimal", required: true, label: "จำนวนเงิน" },
+                    { name: "note", value: e.note, display: e.note, label: "หมายเหตุ" },
+                  ]}
+                />
               ))}
               {s.feeTotal > 0 && (
                 <tr>
