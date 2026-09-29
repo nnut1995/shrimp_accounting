@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot } from "@/lib/calc";
-import { THAI_MONTHS, beYear, formatBE } from "@/lib/dates";
-import { fmt } from "@/lib/format";
+import { THAI_MONTHS, beYear } from "@/lib/dates";
+import LotListTable from "@/components/LotListTable";
 import type { LotWithChildren, Size } from "@/lib/types";
 
 const LOT_SELECT =
@@ -15,7 +15,7 @@ export default async function LotListPage({
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: lots }, { data: sizes }] = await Promise.all([
+  const [{ data: lots, error: lotsError }, { data: sizes, error: sizesError }] = await Promise.all([
     supabase
       .from("lots")
       .select(LOT_SELECT)
@@ -23,6 +23,7 @@ export default async function LotListPage({
       .order("created_at", { ascending: false }),
     supabase.from("sizes").select("*").order("sort_order"),
   ]);
+  if (lotsError || sizesError) throw new Error("โหลดรายการล็อตไม่สำเร็จ กรุณาลองใหม่");
   const all = (lots ?? []) as LotWithChildren[];
   const sizeList = (sizes ?? []) as Size[];
 
@@ -52,8 +53,7 @@ export default async function LotListPage({
     s: calcLot(sizeList, l.buy_lines, l.sell_lines, l.adjustments, l.expenses),
   }));
 
-  const th = "border border-gray-300 px-2 py-1.5 bg-gray-100 text-sm";
-  const td = "border border-gray-300 px-2 py-1.5 text-sm";
+  const brokerNames = [...new Set(all.map(l => l.broker?.trim() || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "th"));
 
   return (
     <div className="space-y-4">
@@ -67,7 +67,7 @@ export default async function LotListPage({
         </Link>
       </div>
 
-      <form className="no-print flex flex-wrap gap-2 items-end" method="get">
+      <form key={`${m}:${y}:${supplierFilter}`} className="no-print flex flex-wrap gap-2 items-end" method="get">
         <label className="text-sm">
           เดือน
           <select name="m" defaultValue={m || ""} className="block border rounded px-2 py-1.5 mt-1 bg-white">
@@ -110,54 +110,15 @@ export default async function LotListPage({
         </button>
       </form>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse bg-white">
-          <thead>
-            <tr>
-              <th className={th}>วันที่ซื้อ</th>
-              <th className={th}>ผู้ขาย</th>
-              <th className={`${th} text-right`}>น้ำหนัก</th>
-              <th className={`${th} text-right`}>น้ำหนัก</th>
-              <th className={`${th} text-right`}>ยอดขายสุทธิ</th>
-              <th className={`${th} text-right`}>กำไร/ขาดทุน</th>
-              <th className={th}>หมายเหตุ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td className={`${td} text-center text-gray-500`} colSpan={7}>
-                  ยังไม่มีล็อต — กด &quot;สร้างล็อตใหม่&quot; เพื่อเริ่มต้น
-                </td>
-              </tr>
-            )}
-            {rows.map(({ lot, s }) => (
-              <tr key={lot.id} className="hover:bg-blue-50">
-                <td className={td}>
-                  <Link
-                    href={`/lots/${lot.id}`}
-                    className="text-blue-700 hover:underline font-medium"
-                  >
-                    {formatBE(lot.buy_date)}
-                  </Link>
-                </td>
-                <td className={td}>{lot.suppliers?.name}</td>
-                <td className={`${td} text-right`}>{fmt(s.buyKg)}</td>
-                <td className={`${td} text-right`}>{fmt(s.sellKg)}</td>
-                <td className={`${td} text-right`}>{fmt(s.netSales)}</td>
-                <td
-                  className={`${td} text-right font-medium ${
-                    s.profit >= 0 ? "text-green-700" : "text-red-700"
-                  }`}
-                >
-                  {fmt(s.profit)}
-                </td>
-                <td className={`${td} text-gray-500`}>{lot.note}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <LotListTable
+        key={`${m}:${y}:${supplierFilter}:${rows.map(({ lot }) => lot.id).join(",")}`}
+        brokerNames={brokerNames}
+        rows={rows.map(({ lot, s }) => ({
+          id: lot.id, buyDate: lot.buy_date, supplier: lot.suppliers?.name ?? "",
+          broker: lot.broker ?? "", note: lot.note, buyKg: s.buyKg,
+          sellKg: s.sellKg, netSales: s.netSales, profit: s.profit,
+        }))}
+      />
     </div>
   );
 }

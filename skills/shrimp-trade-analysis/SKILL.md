@@ -9,29 +9,32 @@ description: Analyze shrimp trading notebook photos, handwritten buy/sell sheets
 
 Analyze shrimp buy/sell notes by turning handwritten entries into normalized rows, recomputing every subtotal, and reporting weight growth by size. Prioritize traceability: show what was read, what was inferred, and which numbers need human recheck.
 
+For Nat's accounting lots, read [August lot conventions](references/august-lot-conventions.md) before interpreting grade splits, combined sales, purchase settlement, fees or monthly reports. It contains evidence from all 19 August 2569 lots and unresolved discrepancies; historical rates are examples, not universal defaults.
+
 ## Ask When Unsure
 
-If handwriting, a label, a date, a farm name, a price, or how to group a row is genuinely unclear and the choice would change the size summary or any total, pause and ask the user with AskUserQuestion before guessing. Phrase the question with: what you read, the alternatives you considered, and the impact on the numbers (for example, "I read this as 719.5 kg, but it could be 819.5 kg — the second one adds 15,700 to gross sale. Which is right?"). Small read uncertainties that do not change totals can still be flagged in `หมายเหตุ` instead of asking.
+If handwriting, a label, a date, a farm name, a price, or how to group a row is genuinely unclear and the choice would change the size summary or any total, ask the user before making that choice or saving dependent entries. Continue independent analysis; a read-only review can report saved values and flag unresolved alternatives without changing them. Phrase the question with: what you read, the alternatives you considered, and the impact on the numbers (for example, "I read this as 719.5 kg, but it could be 819.5 kg — the second one adds 15,700 to gross sale. Which is right?"). Small read uncertainties that do not change totals can still be flagged in `หมายเหตุ` instead of asking.
 
 ## Workflow
 
 1. Inspect the source image or transcript in sections: buy side, sell side, settlement/cost side, and final totals.
 2. Transcribe into structured rows before calculating. Keep uncertain values marked with `?` and do not hide ambiguity.
 3. Normalize labels:
-   - `A`, `อา`, `นิ่ม`, and similar soft-shrimp labels mean `soft` in the JSON data model.
+   - `A`, `อา`, `นิ่ม`, and similar soft-shrimp category labels mean `soft` in the analysis JSON. A sale-quality description of นิ่ม does not automatically change its originating comparison grade; preserve supported split relationships.
    - **Display rule**: in any visible spreadsheet cell, written label, or summary row, write the soft category as `นิ่ม` (not `soft`). Keep `soft` only as the internal `size`/`match_size` key in the JSON data passed to the calculator script.
-   - `เสีย` usually means damaged/loss, but if the user says it matches a sale size, classify it as that size. In Nat's shrimp sheets, `เสีย` can be size `4` when its kg is close to sold size 4 kg.
+   - Preserve `เสีย` as its own category unless source evidence supports a comparison with another grade. Sale descriptions may call it 3, 4 or 6; do not universally map เสีย to 4 or assume it was discarded.
    - Ranges such as `28-28.5` or `39-40` are size labels, not arithmetic.
-4. When a buy size and sell size do not match by label, compare kg similarity before leaving it unmatched:
+4. When buy/sell labels differ, first read explicit combined/split notes, then lot/container, date, density and buyer context; use kg similarity as supporting evidence:
    - Preserve the written label in `size`, and put the inferred comparison group in `match_size`.
-   - Prefer same lot/date/context first; then match the closest remaining buy/sell kg if the difference is plausible.
+   - Sum all supported sale splits across buyers/dates before comparing. Several purchased grades may share a combined sale; preserve original rows and use a shared `match_size` for a supported combined comparison. Never invent the allocation of combined sale kg back to original grades.
    - Record the kg difference and percent difference in `notes`.
-   - If no close kg match exists, keep the original normalized size and flag it as unmatched or suspicious.
+   - If the mapping is unsupported, keep the original normalized size and flag it. Explain zero separate sales or extreme growth using documented regrading where available; do not silently rewrite saved app grades.
 5. Recompute line totals, section totals, gross sales, deductions, expenses, net sale, buy cost, and profit.
 6. Compare buy kg vs sell kg by `match_size` when present, otherwise by `size`, and report growth in kg and percent.
 7. Report cost of buying each size and sale amount of each size. If total buy cost includes adjustments or handwritten balancing that cannot be assigned to a size, show it as `ปรับยอด/ไม่ระบุไซซ์`.
 8. Flag calculation mismatches, crossed-out numbers, inferred values, unmatched rows, and implausible growth.
 9. For Nat's sheets, if `นิ่ม`/`A` appears as a weight category but there is no separate buy-cost line for soft shrimp, treat it as included in `กุ้งดี` for buy-cost and discount purposes. Keep `นิ่ม`/`A` visible as its own weight-growth row, but do not make it costless; record the whole-`กุ้งดี` discount or balancing under `ปรับยอด/ไม่ระบุไซซ์`.
+10. Preserve each lot's purchase date, supplier/farm and all containers, buyers and sale dates. Month reports follow buy date and include later sales. Separate purchase/sales adjustments, manual lot expenses, per-sale fees and monthly overhead. Use actual fees (August includes 1.2%, 1.5% and 2% patterns), not a blanket default. Repricing already-counted shrimp changes money, not kg. See the August reference for examples and app formula/rounding semantics.
 
 ## Direct Accounting API
 
@@ -85,6 +88,8 @@ Fields:
 
 Use `scripts/shrimp_calc.py` after transcription:
 
+Run per lot before rolling up: its `lot` field does not isolate comparison groups. Supply complete, nonduplicated purchase settlement in `buy_costs`; the script does **not** derive total purchase cost from `buy_rows`, consume API `adjustments`, or automatically calculate sale fees. Include cost adjustments in `buy_costs` and fees exactly once in the appropriate expense/sale-adjustment section. Use app API preview when exact app rounding is required; the helper rounds row amounts rather than app grade subtotals.
+
 ```bash
 python3 /path/to/shrimp-trade-analysis/scripts/shrimp_calc.py data.json
 ```
@@ -124,7 +129,7 @@ When creating or editing Nat's shrimp summary workbook, keep the Thai worksheet 
 - Put notes directly in the relevant row's `หมายเหตุ` column whenever possible. Avoid creating a bottom `หมายเหตุ` section unless the user explicitly asks for a separate notes block or the note applies to the whole workbook.
 - If `นิ่ม`/`A` is included in `กุ้งดี` rather than priced separately, write that in the row-level `หมายเหตุ` column and include its buy cost with the `กุ้งดี` price/discount logic.
 - If size-level buy cost does not reconcile to the written total because of handwritten adjustments or balancing lines, add `ปรับยอด/ไม่ระบุไซซ์` instead of hiding the difference.
-- Treat truck plate / lot identifiers such as `80-3867` or `70-5350` as `ตู้`. Do not add a separate sequence or `ลำดับ` column unless the user asks for it.
+- Treat truck plate / container identifiers such as `80-3867`, `70-5350`, `1` or `2` as `ตู้`; preserve the source string. A container is not a separate accounting lot by itself. Do not add a separate sequence or `ลำดับ` column unless the user asks for it.
 - Profit/loss and weight gain/loss:
   - Positive numbers: green fill `#D9EAD3`, dark green text `#27632A`.
   - Zero: yellow fill `#FFF2CC`, brown text `#7A5A00`.

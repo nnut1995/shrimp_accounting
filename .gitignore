@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Discord bot credentials, notebook images, and durable job state
+/.discord-bot/
+
+# Local accounting drafts and saved transaction receipts
+/accounting-drafts/

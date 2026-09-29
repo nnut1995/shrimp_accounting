@@ -90,11 +90,13 @@ export async function createLot(formData: FormData) {
     .insert({
       buy_date: buyDate,
       supplier_id: supplierId,
+      broker: str(formData.get("broker")),
       note: str(formData.get("note")),
     })
     .select("id")
     .single();
   if (error || !data) throw new Error(error?.message ?? "สร้างล็อตไม่สำเร็จ");
+  revalidatePath("/brokers");
   revalidatePath("/");
   redirect(`/lots/${data.id}`);
 }
@@ -112,10 +114,12 @@ export async function updateLot(formData: FormData) {
     .update({
       buy_date: buyDate,
       supplier_id: supplierId,
+      broker: str(formData.get("broker")),
       note: str(formData.get("note")),
     })
     .eq("id", lotId);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath("/");
   revalidatePath(`/lots/${lotId}`);
 }
@@ -124,6 +128,7 @@ export async function deleteLot(lotId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("lots").delete().eq("id", lotId);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath("/");
   redirect("/");
 }
@@ -142,6 +147,7 @@ export async function addBuyLine(formData: FormData) {
     note: str(formData.get("note")),
   });
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -161,6 +167,7 @@ export async function updateBuyLine(formData: FormData) {
     })
     .eq("id", str(formData.get("id")));
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -168,6 +175,7 @@ export async function deleteBuyLine(id: string, lotId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("buy_lines").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -187,6 +195,7 @@ export async function addSellLine(formData: FormData) {
     ...parseFee(formData.get("fee")),
   });
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -208,6 +217,7 @@ export async function updateSellLine(formData: FormData) {
     })
     .eq("id", str(formData.get("id")));
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -222,6 +232,7 @@ export async function bulkUpdateSellFee(formData: FormData) {
     .update(parseFee(formData.get("fee")))
     .eq("lot_id", lotId);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -229,6 +240,7 @@ export async function deleteSellLine(id: string, lotId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("sell_lines").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -245,6 +257,7 @@ export async function addExpense(formData: FormData) {
     note: str(formData.get("note")),
   });
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -252,6 +265,7 @@ export async function deleteExpense(id: string, lotId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -266,7 +280,9 @@ export async function updateExpense(formData: FormData) {
   const { error } = await supabase.from("expenses")
     .update(values).eq("id", id).eq("lot_id", lotId).select("id").single();
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
+  revalidatePath("/brokers");
   revalidatePath("/");
   revalidatePath("/monthly");
   revalidatePath("/yearly");
@@ -334,6 +350,7 @@ export async function addAdjustment(formData: FormData) {
     note: str(formData.get("note")),
   });
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }
 
@@ -341,5 +358,6 @@ export async function deleteAdjustment(id: string, lotId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("adjustments").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
 }

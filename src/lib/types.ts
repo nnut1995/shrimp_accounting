@@ -92,6 +92,7 @@ export type LotWithChildren = {
   id: string;
   buy_date: string;
   supplier_id: string;
+  broker: string;
   note: string;
   created_at: string;
   suppliers: { name: string } | null;

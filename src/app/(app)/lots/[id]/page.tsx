@@ -1,3 +1,4 @@
+import BrokerInput from "@/components/BrokerInput";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot, feeInputValue, sellLineFee } from "@/lib/calc";
@@ -127,6 +128,7 @@ export default async function LotPage({
           <h1 className="text-xl font-bold">
             ล็อต {formatBE(l.buy_date)} — {l.suppliers?.name}
           </h1>
+          <p className="mt-1 text-sm text-gray-600">นายหน้า: {l.broker || "ไม่ระบุ"}</p>
           <form action={updateLot} className="no-print mt-2 flex flex-wrap gap-2">
             <input type="hidden" name="lot_id" value={l.id} />
             <input
@@ -149,6 +151,7 @@ export default async function LotPage({
                 <option key={name} value={name} />
               ))}
             </datalist>
+            <BrokerInput defaultValue={l.broker} />
             <input
               name="note"
               defaultValue={l.note}

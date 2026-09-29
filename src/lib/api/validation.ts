@@ -33,8 +33,9 @@ function line(o: Obj, p: string) {
   return { container: str(o.container, `${p}.container`), size_code: str(o.size_code, `${p}.size_code`, true), description: str(o.description, `${p}.description`), density: str(o.density, `${p}.density`), weight_kg: num(o.weight_kg, `${p}.weight_kg`) };
 }
 export function parseLot(value: unknown) {
-  const o = object(value, "body", ["buy_date", "supplier", "note", "buy_lines", "sell_lines", "expenses", "adjustments"]);
+  const o = object(value, "body", ["buy_date", "supplier", "broker", "note", "buy_lines", "sell_lines", "expenses", "adjustments"]);
   return {
+    ...(o.broker === undefined ? {} : { broker: str(o.broker, "broker") }),
     buy_date: date(o.buy_date, "buy_date"), supplier: str(o.supplier, "supplier", true), note: str(o.note, "note"),
     buy_lines: rows(o.buy_lines, "buy_lines", (v,p) => {
       const r = object(v,p,[...common,"cost_per_kg","note"]);

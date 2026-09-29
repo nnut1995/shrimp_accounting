@@ -17,7 +17,7 @@ export default async function AppLayout({
   return (
     <>
       <header className="no-print bg-white border-b border-gray-200 sticky top-0 z-10">
-        <nav className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 text-sm sm:text-base">
+        <nav className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-4 text-sm sm:text-base">
           <Link href="/" className="font-bold whitespace-nowrap">
             🦐 บัญชีกุ้ง
           </Link>
@@ -29,6 +29,9 @@ export default async function AppLayout({
           </Link>
           <Link href="/yearly" className="text-blue-700 hover:underline">
             สรุปรายปี
+          </Link>
+          <Link href="/brokers" className="text-blue-700 hover:underline">
+            ผลงานนายหน้า
           </Link>
           <Link href="/calculator" className="text-blue-700 hover:underline">
             คำนวณไซส์

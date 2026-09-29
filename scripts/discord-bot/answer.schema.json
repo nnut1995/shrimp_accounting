@@ -1,0 +1,9 @@
+{
+  "type": "object", "additionalProperties": false,
+  "required": ["message", "ready", "lot_json"],
+  "properties": {
+    "message": {"type": "string", "description": "Thai explanation or clarification question. Never claim data was saved."},
+    "ready": {"type": "boolean", "description": "True when the user wants to create or edit the ONE accounting lot belonging to this thread and all material values and fees are clear. Both new lots and edits to the permanently linked existing lot are supported. Existing-lot edits require a linked lot ID and the latest saved lot as the baseline. False when clarification or explicit lot linking is still needed."},
+    "lot_json": {"type": "string", "description": "A JSON string matching the accounting API request, or empty string when not ready. For a linked existing lot, return the complete updated lot, preserving all saved rows and values not explicitly changed and adding later sales only once. Never create a replacement lot."}
+  }
+}

@@ -1,3 +1,4 @@
+import BrokerInput from "@/components/BrokerInput";
 import { createClient } from "@/lib/supabase/server";
 import { createLot } from "@/app/actions";
 import { todayISO } from "@/lib/dates";
@@ -44,6 +45,7 @@ export default async function NewLotPage() {
             ))}
           </datalist>
         </div>
+        <BrokerInput />
         <div>
           <label className="block text-sm mb-1" htmlFor="note">
             หมายเหตุ

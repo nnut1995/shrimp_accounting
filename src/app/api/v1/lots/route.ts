@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       throw error;
     }
     // A cache failure must not turn a committed write into an apparent failure.
-    try { for(const path of ["/","/monthly","/yearly",`/lots/${data.lot_id}`]) revalidatePath(path); } catch {}
+    try { for(const path of ["/","/brokers","/monthly","/yearly",`/lots/${data.lot_id}`]) revalidatePath(path); } catch {}
     return json({data:{...data,summary:preview(payload),url:`/lots/${data.lot_id}`}},data.replayed?200:201);
   });
 }
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const from=params.has("from")?date(params.get("from"),"from"):null;
     const to=params.has("to")?date(params.get("to"),"to"):null;
     if(from && to && from>to) throw new ApiError(422,"validation_error","from must be <= to");
-    let query=db.from("lots").select("id,buy_date,note,created_at,suppliers(name)",{count:"exact"}).order("buy_date",{ascending:false}).order("id").range(offset,offset+limit-1);
+    let query=db.from("lots").select("id,buy_date,broker,note,created_at,suppliers(name)",{count:"exact"}).order("buy_date",{ascending:false}).order("id").range(offset,offset+limit-1);
     if(from) query=query.gte("buy_date",from);
     if(to) query=query.lte("buy_date",to);
     const {data,error,count}=await query;

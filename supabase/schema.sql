@@ -23,6 +23,7 @@ create table lots (
   id uuid primary key default gen_random_uuid(),
   buy_date date not null,
   supplier_id uuid not null references suppliers(id),
+  broker text not null default '',
   note text not null default '',
   created_at timestamptz not null default now()
 );

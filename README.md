@@ -41,3 +41,30 @@ See [API specification](docs/accounting-api.md). Apply
 `supabase/migrations/202609250001_accounting_api.sql` after the base schema before
 using writes. Run `npm run test:api` for API checks.
 The maintained skill copy is [shrimp-trade-analysis](skills/shrimp-trade-analysis/SKILL.md).
+
+## นายหน้า per lot and performance dashboard
+
+Production database updated and feature deployed on 2026-09-29.
+Deployment: `dpl_DaKXrb9rc2SCJdbE7MEqKft4Hbtq`.
+Live dashboard: https://shrimp-accounting.vercel.app/brokers.
+All 83 existing lots retained and initially unassigned.
+
+Apply `supabase/migrations/202609290001_lot_brokers.sql` after the API and lot-update
+migrations, then deploy the app. Existing lots default to an unassigned broker.
+Enter or edit นายหน้า on each lot; `/brokers` compares performance by purchase
+month/year, with broker filters and links to individual lots. Profit includes lot
+expenses and selling fees, but excludes monthly overhead. Unsold lots remain in
+totals and are flagged. Ratios use aggregate weights/revenue, not averages of lot
+percentages. Names are trimmed and grouped by exact name; use suggestions to keep
+spelling consistent. Broker commission is still entered as a lot expense.
+
+The API accepts optional `broker` text on POST/PUT and returns it in lot reads and
+edit snapshots. Omitting it on PUT preserves the existing broker; an empty string
+clears it. Existing idempotency receipts keep working for omitted broker inputs.
+
+Bulk broker assignment is available on the lot list: select individual rows or all
+currently shown rows, assign a broker or explicitly clear it, then save. Changing
+filters resets selection. The server checks authentication and updates only the
+broker field on selected IDs. Bulk release deployed 2026-09-29; 11 tests and the
+production build pass. Live browser interaction verification was unavailable
+because the browser connection timed out.
