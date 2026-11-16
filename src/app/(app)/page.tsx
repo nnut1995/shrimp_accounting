@@ -1,3 +1,4 @@
+import { FilterButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot } from "@/lib/calc";
@@ -125,9 +126,9 @@ export default async function LotListPage({
             ))}
           </select>
         </label>
-        <button className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
+        <FilterButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
           กรอง
-        </button>
+        </FilterButton>
       </form>
 
       <LotListTable

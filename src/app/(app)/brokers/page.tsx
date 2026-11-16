@@ -1,3 +1,4 @@
+import { FilterButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LOT_SELECT } from "@/lib/api/lots";
@@ -51,7 +52,7 @@ export default async function BrokersPage({ searchParams }: {
           <option value="">ทั้งหมด</option>{years.map(year => <option key={year} value={year}>{beYear(year)}</option>)}
         </select></label>
         {sp.broker !== undefined && <input type="hidden" name="broker" value={sp.broker} />}
-        <button className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm">แสดงผล</button>
+        <FilterButton className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm">แสดงผล</FilterButton>
         <Link href="/brokers" className="text-blue-700 text-sm py-2 hover:underline">ล้างตัวกรอง</Link>
       </form>
       <div className="flex flex-wrap gap-2 text-sm">

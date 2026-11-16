@@ -1,3 +1,4 @@
+import SubmitButton from "@/components/SubmitButton";
 import BrokerInput, { loadBrokerNames } from "@/components/BrokerInput";
 import { createClient } from "@/lib/supabase/server";
 import { createLot } from "@/app/actions";
@@ -57,12 +58,9 @@ export default async function NewLotPage() {
             className="w-full border rounded-lg px-3 py-2"
           />
         </div>
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg py-2 font-medium hover:bg-blue-700"
-        >
+        <SubmitButton className="w-full bg-blue-600 text-white rounded-lg py-2 font-medium hover:bg-blue-700" pendingText={"กำลังสร้าง..."}>
           สร้างล็อต
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );
