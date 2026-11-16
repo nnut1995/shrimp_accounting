@@ -1,3 +1,4 @@
+import SubmitButton, { FilterButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addMonthlyExpense, deleteMonthlyExpense, updateMonthlyExpense } from "@/app/actions";
@@ -151,9 +152,9 @@ export default async function MonthlyPage({
               )
             )}
           </select>
-          <button className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
+          <FilterButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
             แสดง
-          </button>
+          </FilterButton>
         </form>
       </div>
 
@@ -347,9 +348,9 @@ export default async function MonthlyPage({
             หมายเหตุ
             <input name="note" placeholder="เช่น ค่าเช่า, เงินเดือน" className={input} />
           </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
+          <SubmitButton className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มค่าใช้จ่าย
-          </button>
+          </SubmitButton>
         </form>
       </section>
 

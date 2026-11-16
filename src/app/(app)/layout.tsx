@@ -1,3 +1,4 @@
+import SubmitButton from "@/components/SubmitButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -37,9 +38,9 @@ export default async function AppLayout({
             คำนวณไซส์
           </Link>
           <form action={signOut} className="ml-auto">
-            <button className="text-gray-500 hover:text-gray-800">
+            <SubmitButton className="text-gray-500 hover:text-gray-800" pendingText={"กำลังออก..."}>
               ออกจากระบบ
-            </button>
+            </SubmitButton>
           </form>
         </nav>
       </header>

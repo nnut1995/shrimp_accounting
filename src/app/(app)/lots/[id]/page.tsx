@@ -1,3 +1,4 @@
+import SubmitButton from "@/components/SubmitButton";
 import BrokerInput, { loadBrokerNames } from "@/components/BrokerInput";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -160,9 +161,9 @@ export default async function LotPage({
               placeholder="หมายเหตุ เช่น ขาดค่ารถ"
               className={`${input} w-72`}
             />
-            <button className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
+            <SubmitButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
               บันทึก
-            </button>
+            </SubmitButton>
           </form>
           {l.note && (
             <p className="hidden print:block text-sm text-gray-600 mt-1">
@@ -334,9 +335,9 @@ export default async function LotPage({
             หมายเหตุ
             <input name="note" className={input} />
           </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
+          <SubmitButton className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มซื้อ
-          </button>
+          </SubmitButton>
         </form>
       </section>
 
@@ -359,9 +360,9 @@ export default async function LotPage({
                   className={`${input} w-40`}
                 />
               </label>
-              <button className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
+              <SubmitButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
                 ใช้กับทุกรายการ
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -453,9 +454,9 @@ export default async function LotPage({
             ค่าธรรมเนียม
             <input name="fee" defaultValue="1.2%" placeholder="1.2% หรือจำนวนเงิน" className={input} />
           </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
+          <SubmitButton className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มขาย
-          </button>
+          </SubmitButton>
         </form>
       </section>
 
@@ -510,9 +511,9 @@ export default async function LotPage({
             หมายเหตุ
             <input name="note" className={input} />
           </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
+          <SubmitButton className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มปรับยอด
-          </button>
+          </SubmitButton>
         </form>
       </section>
 
@@ -583,9 +584,9 @@ export default async function LotPage({
             หมายเหตุ
             <input name="note" placeholder="เช่น 5,323 กก" className={input} />
           </label>
-          <button className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
+          <SubmitButton className="bg-blue-600 text-white rounded px-3 py-1.5 text-sm hover:bg-blue-700">
             + เพิ่มค่าใช้จ่าย
-          </button>
+          </SubmitButton>
         </form>
       </section>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import SubmitButton from "@/components/SubmitButton";
 
 export default function DeleteButton({
   action,
@@ -21,9 +22,9 @@ export default function DeleteButton({
         if (!confirm(confirmText)) e.preventDefault();
       }}
     >
-      <button type="submit" className={className}>
+      <SubmitButton className={className} pendingText="กำลังลบ...">
         {children}
-      </button>
+      </SubmitButton>
     </form>
   );
 }
