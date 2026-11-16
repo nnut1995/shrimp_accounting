@@ -1,4 +1,4 @@
-import BrokerInput from "@/components/BrokerInput";
+import BrokerInput, { loadBrokerNames } from "@/components/BrokerInput";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot, feeInputValue, sellLineFee } from "@/lib/calc";
@@ -54,12 +54,14 @@ export default async function LotPage({
     { data: cats },
     { data: buyerRows },
     { data: supplierRows },
+    brokerNames,
   ] = await Promise.all([
     supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
     supabase.from("sizes").select("*").order("sort_order"),
     supabase.from("expense_categories").select("name").order("name"),
     supabase.from("sell_lines").select("buyer"),
     supabase.from("suppliers").select("name").order("name"),
+    loadBrokerNames(supabase),
   ]);
   if (!lot) notFound();
   const l = lot as LotWithChildren;
@@ -151,7 +153,7 @@ export default async function LotPage({
                 <option key={name} value={name} />
               ))}
             </datalist>
-            <BrokerInput defaultValue={l.broker} />
+            <BrokerInput names={brokerNames} defaultValue={l.broker} />
             <input
               name="note"
               defaultValue={l.note}

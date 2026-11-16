@@ -34,9 +34,12 @@ export default async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifies the session JWT locally (against the project's cached
+  // signing keys) instead of calling the Supabase Auth server on every page
+  // load like getUser did. It still refreshes an expiring session, and falls
+  // back to a server check when the project uses a legacy symmetric secret.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const isLoginPage = pathname.startsWith("/login");
   if (!user && !isLoginPage) {

@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 
-export default async function BrokerInput({ defaultValue = "" }: { defaultValue?: string }) {
-  const db = await createClient();
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+// Load the broker suggestions. Pages call this alongside their other queries
+// so it doesn't add an extra database round trip after the page data arrives.
+export async function loadBrokerNames(db: Db): Promise<string[]> {
   const names = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("lots").select("broker").order("id").range(offset, offset + 999);
@@ -9,13 +12,17 @@ export default async function BrokerInput({ defaultValue = "" }: { defaultValue?
     for (const row of data ?? []) if (row.broker?.trim()) names.add(row.broker.trim());
     if (!data || data.length < 1000) break;
   }
+  return [...names].sort((a, b) => a.localeCompare(b, "th"));
+}
+
+export default function BrokerInput({ names, defaultValue = "" }: { names: string[]; defaultValue?: string }) {
   return (
     <label className="block text-sm">
       นายหน้า
       <input name="broker" defaultValue={defaultValue} list="broker-list" maxLength={2000}
         placeholder="ชื่อนายหน้า (เว้นว่างได้)" className="block w-full border rounded-lg px-3 py-2 mt-1 bg-white" />
       <datalist id="broker-list">
-        {[...names].sort((a, b) => a.localeCompare(b, "th")).map(name => <option key={name} value={name} />)}
+        {names.map(name => <option key={name} value={name} />)}
       </datalist>
     </label>
   );

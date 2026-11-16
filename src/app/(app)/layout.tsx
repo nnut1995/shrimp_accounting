@@ -9,10 +9,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Local JWT verification (see proxy.ts); avoids a second Auth server
+  // round trip before every page in the app renders.
+  const { data } = await supabase.auth.getClaims();
+  if (!data?.claims) redirect("/login");
 
   return (
     <>

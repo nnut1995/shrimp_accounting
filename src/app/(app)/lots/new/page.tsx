@@ -1,14 +1,14 @@
-import BrokerInput from "@/components/BrokerInput";
+import BrokerInput, { loadBrokerNames } from "@/components/BrokerInput";
 import { createClient } from "@/lib/supabase/server";
 import { createLot } from "@/app/actions";
 import { todayISO } from "@/lib/dates";
 
 export default async function NewLotPage() {
   const supabase = await createClient();
-  const { data: suppliers } = await supabase
-    .from("suppliers")
-    .select("name")
-    .order("name");
+  const [{ data: suppliers }, brokerNames] = await Promise.all([
+    supabase.from("suppliers").select("name").order("name"),
+    loadBrokerNames(supabase),
+  ]);
 
   return (
     <div className="max-w-md">
@@ -45,7 +45,7 @@ export default async function NewLotPage() {
             ))}
           </datalist>
         </div>
-        <BrokerInput />
+        <BrokerInput names={brokerNames} />
         <div>
           <label className="block text-sm mb-1" htmlFor="note">
             หมายเหตุ
