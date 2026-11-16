@@ -3,10 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { calcLot } from "@/lib/calc";
 import { THAI_MONTHS, beYear } from "@/lib/dates";
 import LotListTable from "@/components/LotListTable";
-import type { LotWithChildren, Size } from "@/lib/types";
+import type { LotWithChildren } from "@/lib/types";
 
-const LOT_SELECT =
-  "*, suppliers(name), buy_lines(*), sell_lines(*), adjustments(*), expenses(*, expense_categories(name))";
+// Only the columns the list and calcLot's totals need. Loading every column of
+// every buy/sell line (descriptions, notes, timestamps…) for the whole ledger
+// made this page slower as more lots were added.
+const LIST_SELECT =
+  "id, buy_date, broker, note, suppliers(name), buy_lines(size_code, weight_kg, cost_per_kg), sell_lines(size_code, weight_kg, price_per_kg, fee_pct, fee_amount), adjustments(kind, amount), expenses(amount)";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export default async function LotListPage({
   searchParams,
@@ -14,22 +19,39 @@ export default async function LotListPage({
   searchParams: Promise<{ m?: string; y?: string; supplier?: string }>;
 }) {
   const sp = await searchParams;
-  const supabase = await createClient();
-  const [{ data: lots, error: lotsError }, { data: sizes, error: sizesError }] = await Promise.all([
-    supabase
-      .from("lots")
-      .select(LOT_SELECT)
-      .order("buy_date", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase.from("sizes").select("*").order("sort_order"),
-  ]);
-  if (lotsError || sizesError) throw new Error("โหลดรายการล็อตไม่สำเร็จ กรุณาลองใหม่");
-  const all = (lots ?? []) as LotWithChildren[];
-  const sizeList = (sizes ?? []) as Size[];
-
   const m = parseInt(sp.m ?? "") || 0;
   const y = parseInt(sp.y ?? "") || 0;
   const supplierFilter = sp.supplier ?? "";
+
+  const supabase = await createClient();
+  // Filter in the database so only the selected lots (and their lines) are
+  // downloaded; a tiny separate query feeds the year/supplier/broker pickers.
+  let lotsQuery = supabase
+    .from("lots")
+    .select(
+      supplierFilter
+        ? LIST_SELECT.replace("suppliers(name)", "suppliers!inner(name)")
+        : LIST_SELECT
+    );
+  if (y && m) {
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    lotsQuery = lotsQuery
+      .gte("buy_date", `${y}-${pad2(m)}-01`)
+      .lte("buy_date", `${y}-${pad2(m)}-${pad2(last)}`);
+  } else if (y) {
+    lotsQuery = lotsQuery.gte("buy_date", `${y}-01-01`).lte("buy_date", `${y}-12-31`);
+  }
+  if (supplierFilter) lotsQuery = lotsQuery.eq("suppliers.name", supplierFilter);
+
+  const [{ data: lots, error: lotsError }, { data: options, error: optionsError }] =
+    await Promise.all([
+      lotsQuery
+        .order("buy_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase.from("lots").select("buy_date, broker, suppliers(name)"),
+    ]);
+  if (lotsError || optionsError) throw new Error("โหลดรายการล็อตไม่สำเร็จ กรุณาลองใหม่");
+  const all = (options ?? []) as unknown as Pick<LotWithChildren, "buy_date" | "broker" | "suppliers">[];
 
   const years = Array.from(
     new Set(all.map((l) => Number(l.buy_date.slice(0, 4))))
@@ -40,17 +62,15 @@ export default async function LotListPage({
     .filter(Boolean)
     .sort();
 
-  const filtered = all.filter((l) => {
-    if (y && Number(l.buy_date.slice(0, 4)) !== y) return false;
-    if (m && Number(l.buy_date.slice(5, 7)) !== m) return false;
-    if (supplierFilter && (l.suppliers?.name ?? "") !== supplierFilter)
-      return false;
-    return true;
-  });
+  // Month without a year can't be a single date range; filter that case here.
+  const filtered = ((lots ?? []) as unknown as LotWithChildren[]).filter(
+    (l) => !m || Number(l.buy_date.slice(5, 7)) === m
+  );
 
+  // Sizes only affect the order of per-grade rows, not the totals shown here.
   const rows = filtered.map((l) => ({
     lot: l,
-    s: calcLot(sizeList, l.buy_lines, l.sell_lines, l.adjustments, l.expenses),
+    s: calcLot([], l.buy_lines, l.sell_lines, l.adjustments, l.expenses),
   }));
 
   const brokerNames = [...new Set(all.map(l => l.broker?.trim() || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "th"));
