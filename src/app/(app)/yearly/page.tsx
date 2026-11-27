@@ -1,5 +1,5 @@
-import { FilterButton } from "@/components/SubmitButton";
-import Link from "next/link";
+import { FilterButton, FilterForm } from "@/components/SubmitButton";
+import Link from "@/components/FastLink";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot, round2 } from "@/lib/calc";
 import { calcTotals, summarize, type LotRow } from "@/lib/summary";
@@ -144,7 +144,7 @@ export default async function YearlyPage({
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">สรุปประจำปี {beYear(y)}</h1>
-        <form className="no-print ml-auto flex gap-2 items-center" method="get">
+        <FilterForm className="no-print ml-auto flex gap-2 items-center">
           <select
             name="y"
             defaultValue={y}
@@ -161,7 +161,7 @@ export default async function YearlyPage({
           <FilterButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
             แสดง
           </FilterButton>
-        </form>
+        </FilterForm>
       </div>
 
       {/* year totals */}

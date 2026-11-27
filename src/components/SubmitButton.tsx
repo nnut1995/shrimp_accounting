@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useTransition,
+  type ComponentProps,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 
 export function Spinner({ className = "" }: { className?: string }) {
@@ -50,10 +58,37 @@ export default function SubmitButton({
   );
 }
 
+const FilterPending = createContext(false);
+
 /**
- * Submit button for plain GET filter forms (full page load). Shows a spinner
- * from the moment the form is submitted until the new page replaces this one.
+ * GET filter form that switches pages inside the app instead of reloading the
+ * whole site: the current page stays on screen and only the new data is
+ * fetched. Works like a normal `<form method="get">` if scripts are off.
  */
+export function FilterForm({
+  children,
+  ...props
+}: Omit<ComponentProps<"form">, "method" | "onSubmit" | "action">) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [pending, startTransition] = useTransition();
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(e.currentTarget)) {
+      if (typeof value === "string") params.append(key, value);
+    }
+    const qs = params.toString();
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+  }
+  return (
+    <form {...props} method="get" onSubmit={onSubmit}>
+      <FilterPending.Provider value={pending}>{children}</FilterPending.Provider>
+    </form>
+  );
+}
+
+/** Submit button for `FilterForm`; shows a spinner until the new data is in. */
 export function FilterButton({
   children,
   pendingText = "กำลังโหลด...",
@@ -63,25 +98,9 @@ export function FilterButton({
   pendingText?: ReactNode;
   className?: string;
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [pending, setPending] = useState(false);
-  useEffect(() => {
-    const form = ref.current?.form;
-    if (!form) return;
-    const onSubmit = () => setPending(true);
-    // Returning with the back button can restore this page from the browser
-    // cache with the spinner still showing; reset it.
-    const onShow = () => setPending(false);
-    form.addEventListener("submit", onSubmit);
-    window.addEventListener("pageshow", onShow);
-    return () => {
-      form.removeEventListener("submit", onSubmit);
-      window.removeEventListener("pageshow", onShow);
-    };
-  }, []);
+  const pending = useContext(FilterPending);
   return (
     <button
-      ref={ref}
       type="submit"
       aria-busy={pending}
       className={`${className} ${pending ? "opacity-60 cursor-wait" : ""}`}

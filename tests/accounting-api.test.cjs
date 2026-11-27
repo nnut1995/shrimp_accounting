@@ -135,7 +135,7 @@ test('bulk broker update validates selection and auth, changes only selected bro
   let user={id:'user'},failure=null,calls=[];const paths=[];
   const query={update(values){calls.push(['update',values]);return this;},in(column,values){calls.push(['in',column,values]);return this;},async select(){return {data:ids.map(id=>({id})),error:failure};}};
   const {bulkUpdateBroker}=load('src/app/broker-actions.ts',{
-    '@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user}})},from(table){calls.push(['from',table]);return query;}})},
+    '@/lib/supabase/server':{createClient:async()=>({auth:{getClaims:async()=>({data:user?{claims:user}:null})},from(table){calls.push(['from',table]);return query;}})},
     'next/cache':{revalidatePath:p=>paths.push(p)},
   });
   for(const args of [[[], 'นาย ก','assign'],[['bad-id'],'นาย ก','assign'],[ids,'  ','assign'],[ids,'name','invalid'],[ids,'x'.repeat(2001),'assign'],[Array(1001).fill(ids[0]),'name','assign']])assert.ok('error' in await bulkUpdateBroker(...args));

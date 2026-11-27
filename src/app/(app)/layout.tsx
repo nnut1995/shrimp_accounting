@@ -1,5 +1,5 @@
 import SubmitButton from "@/components/SubmitButton";
-import Link from "next/link";
+import Link from "@/components/FastLink";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions";
@@ -22,10 +22,10 @@ export default async function AppLayout({
           <Link href="/" className="font-bold whitespace-nowrap">
             🦐 บัญชีกุ้ง
           </Link>
-          <Link href="/" className="text-blue-700 hover:underline">
+          <Link href="/" prefetch className="text-blue-700 hover:underline">
             รายการล็อต
           </Link>
-          <Link href="/monthly" className="text-blue-700 hover:underline">
+          <Link href="/monthly" prefetch className="text-blue-700 hover:underline">
             สรุปรายเดือน
           </Link>
           <Link href="/yearly" className="text-blue-700 hover:underline">

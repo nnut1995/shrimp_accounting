@@ -1,5 +1,5 @@
-import { FilterButton } from "@/components/SubmitButton";
-import Link from "next/link";
+import { FilterButton, FilterForm } from "@/components/SubmitButton";
+import Link from "@/components/FastLink";
 import { createClient } from "@/lib/supabase/server";
 import { calcLot } from "@/lib/calc";
 import { THAI_MONTHS, beYear } from "@/lib/dates";
@@ -88,7 +88,7 @@ export default async function LotListPage({
         </Link>
       </div>
 
-      <form key={`${m}:${y}:${supplierFilter}`} className="no-print flex flex-wrap gap-2 items-end" method="get">
+      <FilterForm key={`${m}:${y}:${supplierFilter}`} className="no-print flex flex-wrap gap-2 items-end">
         <label className="text-sm">
           เดือน
           <select name="m" defaultValue={m || ""} className="block border rounded px-2 py-1.5 mt-1 bg-white">
@@ -129,7 +129,7 @@ export default async function LotListPage({
         <FilterButton className="border rounded px-3 py-1.5 text-sm bg-white hover:bg-gray-100">
           กรอง
         </FilterButton>
-      </form>
+      </FilterForm>
 
       <LotListTable
         key={`${m}:${y}:${supplierFilter}:${rows.map(({ lot }) => lot.id).join(",")}`}
