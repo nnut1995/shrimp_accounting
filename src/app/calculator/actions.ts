@@ -7,21 +7,19 @@ const SELECT = "id, title, data, created_at, updated_at";
 
 async function requireUser() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("ต้องเข้าสู่ระบบก่อนบันทึก");
-  return { supabase, user };
+  // Verified locally from the session token (no Auth server round trip).
+  const { data } = await supabase.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (!sub) throw new Error("ต้องเข้าสู่ระบบก่อนบันทึก");
+  return { supabase, user: { id: sub } };
 }
 
 // History list for the current user. Returns [] for anonymous visitors so the
 // public calculator still renders.
 export async function listSheets(): Promise<CalcSheet[]> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const { data: auth } = await supabase.auth.getClaims();
+  if (!auth?.claims) return [];
   const { data, error } = await supabase
     .from("calc_sheets")
     .select(SELECT)

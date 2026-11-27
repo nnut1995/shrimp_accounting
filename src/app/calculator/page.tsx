@@ -13,9 +13,9 @@ export const metadata: Metadata = {
 // login and are scoped to the user; anonymous visitors just get the calculator.
 export default async function CalculatorPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local token check (no Auth server round trip) — same as the rest of the app.
+  const { data: auth } = await supabase.auth.getClaims();
+  const user = auth?.claims ?? null;
   const sheets = user ? await listSheets() : [];
 
   return (
