@@ -16,8 +16,8 @@ copy. The old project is only read and stays as a backup.
 2. In the new project, copy any Auth settings you changed in the old one
    (Authentication → URL Configuration: Site URL
    `https://shrimp-accounting.vercel.app`; sign-ups setting; email templates).
-3. On your computer, install the tools:
-   `brew install supabase/tap/supabase libpq` and
+3. On your computer, install psql/pg_dump (Docker is not needed):
+   `brew install libpq` and
    `export PATH="$(brew --prefix libpq)/bin:$PATH"`.
 4. In each project, open **Connect** and copy the **Session pooler** connection
    string (with the database password filled in). Keep them private; don't
