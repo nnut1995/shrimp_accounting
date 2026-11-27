@@ -60,7 +60,7 @@ export default async function LotPage({
     supabase.from("lots").select(LOT_SELECT).eq("id", id).single(),
     supabase.from("sizes").select("*").order("sort_order"),
     supabase.from("expense_categories").select("name").order("name"),
-    supabase.from("sell_lines").select("buyer"),
+    supabase.from("sell_lines").select("buyer").neq("buyer", ""),
     supabase.from("suppliers").select("name").order("name"),
     loadBrokerNames(supabase),
   ]);

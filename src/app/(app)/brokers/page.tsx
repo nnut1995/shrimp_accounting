@@ -1,5 +1,5 @@
-import { FilterButton } from "@/components/SubmitButton";
-import Link from "next/link";
+import { FilterButton, FilterForm } from "@/components/SubmitButton";
+import Link from "@/components/FastLink";
 import { createClient } from "@/lib/supabase/server";
 import { LOT_SELECT } from "@/lib/api/lots";
 import { calcLot } from "@/lib/calc";
@@ -44,7 +44,7 @@ export default async function BrokersPage({ searchParams }: {
         <h1 className="text-xl font-bold">ผลงานนายหน้า</h1>
         <p className="mt-1 text-sm text-gray-600">เปรียบเทียบตามวันที่ซื้อของล็อต • เรียงตามกำไรสูงสุด</p>
       </div>
-      <form key={`${m}:${y}:${sp.broker ?? "all"}`} method="get" className="flex flex-wrap items-end gap-3">
+      <FilterForm key={`${m}:${y}:${sp.broker ?? "all"}`} className="flex flex-wrap items-end gap-3">
         <label className="text-sm">เดือน<select name="m" defaultValue={m || ""} className={control}>
           <option value="">ทั้งหมด</option>{THAI_MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
         </select></label>
@@ -54,7 +54,7 @@ export default async function BrokersPage({ searchParams }: {
         {sp.broker !== undefined && <input type="hidden" name="broker" value={sp.broker} />}
         <FilterButton className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm">แสดงผล</FilterButton>
         <Link href="/brokers" className="text-blue-700 text-sm py-2 hover:underline">ล้างตัวกรอง</Link>
-      </form>
+      </FilterForm>
       <div className="flex flex-wrap gap-2 text-sm">
         <Link href={`/brokers?m=${m}&y=${y}`} className="border rounded-full px-3 py-1 hover:bg-blue-50">นายหน้าทั้งหมด</Link>
         {names.map(name => <Link key={name} href={`/brokers?${new URLSearchParams({ m: String(m), y: String(y), broker: name })}`}

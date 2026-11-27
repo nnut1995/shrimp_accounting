@@ -46,17 +46,19 @@ async function findOrCreateByName(
 }
 
 // เบอร์ is free text, but buy_lines/sell_lines.size_code still references
-// sizes(code). Register any new code so it satisfies the FK and shows up in the
-// suggestion list next time; existing codes keep their label and sort_order.
-async function ensureSize(code: string): Promise<string> {
+// sizes(code). Saves try the write straight away (one database trip, which is
+// the usual case because the code already exists). Only when the database
+// rejects an unknown code is it registered, so it shows up in the suggestion
+// list next time, and the write retried. Existing codes keep their label and
+// sort_order.
+function sizeCode(v: FormDataEntryValue | null): string {
+  const code = str(v);
   if (!code) throw new Error("กรุณากรอกเบอร์");
+  return code;
+}
+
+async function registerSize(code: string) {
   const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("sizes")
-    .select("code")
-    .eq("code", code)
-    .maybeSingle();
-  if (existing) return code;
   const { data: last } = await supabase
     .from("sizes")
     .select("sort_order")
@@ -70,7 +72,19 @@ async function ensureSize(code: string): Promise<string> {
       { onConflict: "code", ignoreDuplicates: true }
     );
   if (error) throw new Error(error.message);
-  return code;
+}
+
+async function withSize<T extends { error: { code?: string; message: string } | null }>(
+  code: string,
+  write: () => PromiseLike<T>
+): Promise<T> {
+  const first = await write();
+  // 23503 = foreign key violation: the size code isn't in sizes yet.
+  if (first.error?.code !== "23503" || !first.error.message.includes("size_code")) {
+    return first;
+  }
+  await registerSize(code);
+  return write();
 }
 
 export async function signOut() {
@@ -136,16 +150,17 @@ export async function deleteLot(lotId: string) {
 export async function addBuyLine(formData: FormData) {
   const supabase = await createClient();
   const lotId = str(formData.get("lot_id"));
-  const { error } = await supabase.from("buy_lines").insert({
+  const size_code = sizeCode(formData.get("size_code"));
+  const { error } = await withSize(size_code, () => supabase.from("buy_lines").insert({
     lot_id: lotId,
     container: str(formData.get("container")),
-    size_code: await ensureSize(str(formData.get("size_code"))),
+    size_code,
     description: str(formData.get("description")),
     density: str(formData.get("density")),
     weight_kg: num(formData.get("weight_kg")),
     cost_per_kg: num(formData.get("cost_per_kg")),
     note: str(formData.get("note")),
-  });
+  }));
   if (error) throw new Error(error.message);
   revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
@@ -154,18 +169,19 @@ export async function addBuyLine(formData: FormData) {
 export async function updateBuyLine(formData: FormData) {
   const supabase = await createClient();
   const lotId = str(formData.get("lot_id"));
-  const { error } = await supabase
+  const size_code = sizeCode(formData.get("size_code"));
+  const { error } = await withSize(size_code, () => supabase
     .from("buy_lines")
     .update({
       container: str(formData.get("container")),
-      size_code: await ensureSize(str(formData.get("size_code"))),
+      size_code,
       description: str(formData.get("description")),
       density: str(formData.get("density")),
       weight_kg: num(formData.get("weight_kg")),
       cost_per_kg: num(formData.get("cost_per_kg")),
       note: str(formData.get("note")),
     })
-    .eq("id", str(formData.get("id")));
+    .eq("id", str(formData.get("id"))));
   if (error) throw new Error(error.message);
   revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
@@ -182,18 +198,19 @@ export async function deleteBuyLine(id: string, lotId: string) {
 export async function addSellLine(formData: FormData) {
   const supabase = await createClient();
   const lotId = str(formData.get("lot_id"));
-  const { error } = await supabase.from("sell_lines").insert({
+  const size_code = sizeCode(formData.get("size_code"));
+  const { error } = await withSize(size_code, () => supabase.from("sell_lines").insert({
     lot_id: lotId,
     sell_date: str(formData.get("sell_date")),
     container: str(formData.get("container")),
-    size_code: await ensureSize(str(formData.get("size_code"))),
+    size_code,
     description: str(formData.get("description")),
     density: str(formData.get("density")),
     weight_kg: num(formData.get("weight_kg")),
     price_per_kg: num(formData.get("price_per_kg")),
     buyer: str(formData.get("buyer")),
     ...parseFee(formData.get("fee")),
-  });
+  }));
   if (error) throw new Error(error.message);
   revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
@@ -202,12 +219,13 @@ export async function addSellLine(formData: FormData) {
 export async function updateSellLine(formData: FormData) {
   const supabase = await createClient();
   const lotId = str(formData.get("lot_id"));
-  const { error } = await supabase
+  const size_code = sizeCode(formData.get("size_code"));
+  const { error } = await withSize(size_code, () => supabase
     .from("sell_lines")
     .update({
       sell_date: str(formData.get("sell_date")),
       container: str(formData.get("container")),
-      size_code: await ensureSize(str(formData.get("size_code"))),
+      size_code,
       description: str(formData.get("description")),
       density: str(formData.get("density")),
       weight_kg: num(formData.get("weight_kg")),
@@ -215,7 +233,7 @@ export async function updateSellLine(formData: FormData) {
       buyer: str(formData.get("buyer")),
       ...parseFee(formData.get("fee")),
     })
-    .eq("id", str(formData.get("id")));
+    .eq("id", str(formData.get("id"))));
   if (error) throw new Error(error.message);
   revalidatePath("/brokers");
   revalidatePath(`/lots/${lotId}`);
@@ -271,8 +289,8 @@ export async function deleteExpense(id: string, lotId: string) {
 
 export async function updateExpense(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("กรุณาเข้าสู่ระบบ");
+  const { data: auth } = await supabase.auth.getClaims();
+  if (!auth?.claims) throw new Error("กรุณาเข้าสู่ระบบ");
   const id = str(formData.get("id"));
   const lotId = str(formData.get("lot_id"));
   if (!id || !lotId) throw new Error("ไม่พบรายการค่าใช้จ่าย");
@@ -302,8 +320,8 @@ async function expenseEditValues(formData: FormData) {
 
 export async function updateMonthlyExpense(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("กรุณาเข้าสู่ระบบ");
+  const { data: auth } = await supabase.auth.getClaims();
+  if (!auth?.claims) throw new Error("กรุณาเข้าสู่ระบบ");
   const id = str(formData.get("id"));
   if (!id) throw new Error("ไม่พบรายการค่าใช้จ่าย");
   const values = await expenseEditValues(formData);

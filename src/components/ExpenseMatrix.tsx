@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/FastLink";
 import { formatBE } from "@/lib/dates";
 import { fmt } from "@/lib/format";
 import type { ExpenseMatrix } from "@/lib/summary";

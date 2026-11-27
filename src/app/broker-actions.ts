@@ -19,8 +19,8 @@ export async function bulkUpdateBroker(
   let updatedIds: string[];
   try {
     const db = await createClient();
-    const { data: { user }, error: authError } = await db.auth.getUser();
-    if (authError || !user) return { error: "กรุณาเข้าสู่ระบบใหม่ก่อนบันทึก" };
+    const { data: auth, error: authError } = await db.auth.getClaims();
+    if (authError || !auth?.claims) return { error: "กรุณาเข้าสู่ระบบใหม่ก่อนบันทึก" };
     // One statement updates only broker; all accounting fields remain untouched.
     const { data, error } = await db.from("lots")
       .update({ broker: mode === "clear" ? "" : broker.trim() })
